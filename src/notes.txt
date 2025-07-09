@@ -1,0 +1,11 @@
+Commands to support:
+
+go wtime <> btime <> winc <> binc <>
+position startpos [moves <moves...>]
+position fen <fen> [moves <moves...>]
+quit
+uci
+ucinewgame
+isready
+
+
