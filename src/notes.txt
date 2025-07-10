@@ -9,3 +9,9 @@ ucinewgame
 isready
 
 
+# references
+Arena Chess GUI (free)
+BanksiaGUI (free)
+Cutechess (free)
+Nibbler (free)
+Chessbase (paid).
