@@ -102,6 +102,8 @@ pub fn get_moves(board: &Board, origin: Position) -> Vec<Move> {
 pub fn get_unchecked_moves(board: &Board, origin: Position) -> Vec<Move> {
     // get all moves but dont verify that king is under attack,
     //used in check_detection to not get infinite loop
+
+    // TODO rewrite to not assume board turn is the color of the piece
     let (piece, Some(color)) = board.get_piece_and_color(origin) else {
         return Vec::new();
     };

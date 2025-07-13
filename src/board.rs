@@ -381,7 +381,7 @@ impl Board {
                 continue;
             };
             // our piece or king 
-            if is_white == self.white_turn || piece == Piece::King {
+            if piece == Piece::King {
                 continue;
             }
             // enemy piece
