@@ -1,20 +1,31 @@
+pub use chess_engine::{
+    board::{Board, Position},
+    fen_parser::{parse_fen, starting_pos_fen},
+    move_generation::get_moves,
+    perf::perft_divide,
+    uci::uci_protocol,
+};
+
 use std::io;
 
-mod fen_parser;
-mod board;
-mod move_generation;
-mod uci;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut buffer = String::new();
-    io::stdin()
-        .read_line(&mut buffer)
-        .expect("Failed to read input");
+    println!("Testing using perf");
+    let mut board =
+        parse_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")?;
+    board.play_string_move("e2b5");
+    // board.play_string_move("b7b5");
+    // board.play_string_move("a4a5");
+    perft_divide(&board, 1);
 
-    if buffer.trim() == "uci" {
-        crate::uci::uci_protocol()?;
-        return Ok(());
-    }
-    println!("Currently only UCI protocol is supported, stopping");
+    // let mut buffer = String::new();
+    // io::stdin()
+    //     .read_line(&mut buffer)
+    //     .expect("Failed to read input");
+
+    // if buffer.trim() == "uci" {
+    //     uci_protocol()?;
+    //     return Ok(());
+    // }
+    // println!("Currently only UCI protocol is supported, stopping");
     return Ok(());
 }

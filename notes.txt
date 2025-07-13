@@ -1,0 +1,40 @@
+Commands to support:
+
+go wtime <> btime <> winc <> binc <>
+position startpos [moves <moves...>]
+position fen <fen> [moves <moves...>]
+quit
+uci
+ucinewgame
+isready
+
+
+# references
+Arena Chess GUI (free)
+BanksiaGUI (free)
+Cutechess (free)
+Nibbler (free)
+Chessbase (paid).
+
+perf of 6:
+b1c3: 5708064
+b1a3: 4856835
+g1h3: 4877234
+g1f3: 5723523
+a2a4: 5363555
+a2a3: 4463267
+b2b4: 5293555
+b2b3: 5310358
+c2c4: 5866666
+c2c3: 5417640
+d2d4: 8879566
+d2d3: 8073082
+e2e4: 9771632
+e2e3: 9726018
+f2f4: 4890429
+f2f3: 4404141
+g2g4: 5239875
+g2g3: 5346260
+h2h4: 5385554
+h2h3: 4463070
+Total nodes at depth 6: 119060324

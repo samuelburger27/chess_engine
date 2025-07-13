@@ -1,1 +1,10 @@
 /target
+/.DS_Store
+/.vscode
+compare.sh
+engine_compare
+engine_out
+run_stockfish.sh
+stock_compare
+stock_in
+stock_out.txt

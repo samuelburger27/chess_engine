@@ -15,10 +15,10 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     std::io::stdin().read_line(&mut input)?;
     while input != "quit\n" {
         let parts: Vec<&str> = input.trim().split_whitespace().collect();
-        
+
         if parts.len() == 0 {
             input.clear();
-            std::io::stdin().read_line(&mut input)?;    
+            std::io::stdin().read_line(&mut input)?;
             continue;
         }
         match parts[0] {
@@ -33,7 +33,6 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
         }
         input.clear();
         std::io::stdin().read_line(&mut input)?;
-        
     }
 
     return Ok(());
@@ -57,7 +56,7 @@ fn start_search(board: &Board) {
 fn parse_position(parts: &Vec<&str>) -> Result<Board, String> {
     let mut board = match parts[1] {
         "fen" => parse_fen(parts[2]),
-        "start_pos" => parse_fen(&starting_pos_fen()),
+        "startpos" => parse_fen(&starting_pos_fen()),
         _ => Err("Not a valid position".to_string()),
     }?;
 

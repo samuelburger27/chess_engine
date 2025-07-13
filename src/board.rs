@@ -1,8 +1,9 @@
 use crate::move_generation::get_moves;
+use crate::move_generation::get_unchecked_moves;
 use crate::move_generation::Move;
 use crate::move_generation::SpecialMove;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Position {
     pub x: usize,
     pub y: usize,
@@ -21,21 +22,15 @@ impl Position {
     }
 
     pub fn add_scalars(&self, (add_x, add_y): (i32, i32)) -> Result<Position, ()> {
-        let casted_x = i32::try_from(self.x).unwrap();
-        let casted_y = i32::try_from(self.y).unwrap();
-
-        let Ok(x) = usize::try_from(casted_x + add_x) else {
-            return Err(());
-        };
-
-        let Ok(y) = usize::try_from(casted_y + add_y) else {
-            return Err(());
-        };
-        if x >= 8 || y >= 8 {
+        let x: i32 = self.x as i32 + add_x;
+        let y: i32 = self.y as i32 + add_y;
+        if x >= 8 || y >= 8 || x < 0 || y < 0 {
             return Err(());
         }
-
-        return Ok(Position { x: x, y: y });
+        return Ok(Position {
+            x: x as usize,
+            y: y as usize,
+        });
     }
 
     pub fn add_bit_scalar(&mut self, scalar: i32) {
@@ -101,7 +96,7 @@ impl TryFrom<&str> for Position {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Piece {
     Pawn,
     Rook,
@@ -131,7 +126,7 @@ impl TryFrom<&str> for Piece {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "P" | "p" => Ok(Piece::King),
+            "P" | "p" => Ok(Piece::Pawn),
             "R" | "r" => Ok(Piece::Rook),
             "N" | "n" => Ok(Piece::Knight),
             "B" | "b" => Ok(Piece::Bishop),
@@ -200,18 +195,16 @@ impl<'a> Iterator for BoardIter<'a> {
             return None;
         }
         let tile = self.board.board[self.y][self.x];
+        let position = Position {
+            x: self.x,
+            y: self.y,
+        };
         self.x += 1;
         if self.x >= 8 {
             self.x = 0;
             self.y += 1;
         }
-        return Some((
-            Position {
-                x: self.x,
-                y: self.y,
-            },
-            tile,
-        ));
+        Some((position, tile))
     }
 }
 
@@ -224,11 +217,17 @@ impl<'a> IntoIterator for &'a Board {
 }
 
 impl Board {
-
-    pub fn new(board: [[Tile; 8]; 8], turn: bool, en_passant: Option<Position>, halfmove: u32, full_move: u32, castle_right: [bool; 4]) -> Board {
-        let mut board = Board { 
-            board: board, 
-            game_state: GameState::Normal, 
+    pub fn new(
+        board: [[Tile; 8]; 8],
+        turn: bool,
+        en_passant: Option<Position>,
+        halfmove: u32,
+        full_move: u32,
+        castle_right: [bool; 4],
+    ) -> Board {
+        let mut board = Board {
+            board: board,
+            game_state: GameState::Normal,
             white_turn: turn,
             en_passant: en_passant,
             halfmove_count: halfmove,
@@ -251,8 +250,11 @@ impl Board {
 
     fn update_game_state(&mut self) {
         // this method should be called when creating board and when committing a move
-        
-        // TODO
+        // if self.in_check(Some(true)) {
+
+        // }
+
+        // TODO, draw, stalemate
     }
 
     pub fn get_piece_and_color(&self, pos: Position) -> Tile {
@@ -277,14 +279,19 @@ impl Board {
         return moves;
     }
 
-    pub fn commit_verified_move(&mut self, move_: Move) {
+    pub fn commit_verified_move(&mut self, move_: &Move) {
         // commit move
         // move should be verified before
-        let capture: bool = if let (Piece::None, _) = self.get_piece_and_color(move_.dest) {false} else {true}; 
+        let capture: bool = if let (Piece::None, _) = self.get_piece_and_color(move_.dest) {
+            false
+        } else {
+            true
+        };
         let to_move = *self.get_tile_ref(move_.origin);
         *self.get_tile_ref(move_.dest) = to_move;
         *self.get_tile_ref(move_.origin) = EMPTY_TILE;
 
+        let rook_rank: usize = if self.white_turn { 0 } else { 7 };
         match move_.special_move {
             SpecialMove::Promotion => {
                 let (_, orignal_color) = self.get_piece_and_color(move_.dest);
@@ -299,28 +306,30 @@ impl Board {
                 if let Ok(new_rook_pos) = move_.dest.add_scalars((-1, 0)) {
                     let rook = *self.get_tile_ref(Position { x: 7, y: 0 });
                     *self.get_tile_ref(new_rook_pos) = rook;
-                    *self.get_tile_ref(Position { x: 7, y: 0 }) = EMPTY_TILE;
+                    *self.get_tile_ref(Position { x: 7, y: rook_rank }) = EMPTY_TILE;
                 }
             }
             SpecialMove::QueenCastle => {
                 if let Ok(new_rook_pos) = move_.dest.add_scalars((1, 0)) {
                     let rook = *self.get_tile_ref(Position { x: 0, y: 0 });
                     *self.get_tile_ref(new_rook_pos) = rook;
-                    *self.get_tile_ref(Position { x: 0, y: 0 }) = EMPTY_TILE;
+                    *self.get_tile_ref(Position { x: 0, y: rook_rank }) = EMPTY_TILE;
                 }
             }
-            SpecialMove::None => ()
+            SpecialMove::None => (),
         }
 
-        // update board state        
+        // update board state
         let (moved_piece, _) = self.get_piece_and_color(move_.dest);
-        let mut pawn_moved = false;        
+        let mut pawn_moved = false;
         self.en_passant = None;
         match moved_piece {
             Piece::Pawn => {
                 pawn_moved = true;
                 // double move
-                if move_.origin.x == move_.dest.x && (move_.origin.y as i32 - move_.dest.y as i32).abs() == 2 {
+                if move_.origin.x == move_.dest.x
+                    && (move_.origin.y as i32 - move_.dest.y as i32).abs() == 2
+                {
                     self.en_passant = Some(move_.dest);
                 }
             }
@@ -330,42 +339,54 @@ impl Board {
             }
 
             Piece::Rook => {
-                let rank: usize = if self.white_turn {0} else {7};
-                if move_.origin == (Position {x: 0, y: rank}) {
+                if move_.origin == (Position { x: 0, y: rook_rank }) {
                     self.update_castle_right(false);
-                }
-                else if move_.origin == (Position {x: 7, y: rank}) {
+                } else if move_.origin == (Position { x: 7, y: rook_rank }) {
                     self.update_castle_right(true);
                 }
             }
             _ => (),
         }
-        
+
         self.fullmove_count += 1;
         if !capture && !pawn_moved {
             self.halfmove_count += 1
         }
         self.white_turn = !self.white_turn;
+
+        self.update_game_state();
     }
 
     pub fn in_check(&self, king_color: Color) -> bool {
         // maybe keep king pos in the structure
         // if no color is provided use current player turn
-        let col = if let Some(c) = king_color {c} else {self.white_turn};
+        let col = if let Some(c) = king_color {
+            c
+        } else {
+            self.white_turn
+        };
         let mut king: Option<Position> = None;
         for (pos, (piece, color)) in self {
-            let Some(is_white) = color else { continue; };
+            let Some(is_white) = color else {
+                continue;
+            };
             if is_white == col && piece == Piece::King {
                 king = Some(pos);
             }
         }
-        let Some(king_pos) = king else { return false};
+        let Some(king_pos) = king else { return false };
 
-        for (pos, (_, color)) in self {
-            let Some(is_white) = color else { continue;};
+        for (pos, (piece, color)) in self {
+            let Some(is_white) = color else {
+                continue;
+            };
+            // our piece or king 
+            if is_white == self.white_turn || piece == Piece::King {
+                continue;
+            }
             // enemy piece
             if is_white != col {
-                for move_ in  get_moves(self, pos) {
+                for move_ in get_unchecked_moves(self, pos) {
                     if move_.dest == king_pos {
                         return true;
                     }
@@ -379,7 +400,7 @@ impl Board {
         let moves = get_moves(self, origin);
         for move_ in moves {
             if move_.origin == origin && move_.dest == dest && move_.promote == promote {
-                self.commit_verified_move(move_);
+                self.commit_verified_move(&move_);
                 return true;
             }
         }
@@ -411,7 +432,11 @@ impl Board {
     pub fn get_all_moves(&self, col: Color) -> Vec<Move> {
         // returns all legal moves that can be made by player
         // if no color is provided use current player turn
-        let color = if let Some(c) = col {c} else {self.white_turn};
+        let color = if let Some(c) = col {
+            c
+        } else {
+            self.white_turn
+        };
         let mut result = Vec::new();
 
         for (pos, (_, tile_color)) in self {
@@ -420,6 +445,6 @@ impl Board {
                 _ => (),
             }
         }
-        return result
+        return result;
     }
 }

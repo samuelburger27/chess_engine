@@ -2,7 +2,7 @@ use crate::board::Board;
 use crate::board::Piece;
 use crate::board::Position;
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum SpecialMove {
     None,
     Promotion,
@@ -11,7 +11,7 @@ pub enum SpecialMove {
     EnPassant,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Move {
     // maybe in future remake into a 16 bit representation
     pub origin: Position,
@@ -30,30 +30,30 @@ impl Move {
     }
 
     fn new_promote(origin: Position, dest: Position) -> [Move; 4] {
-        [ 
+        [
             Move {
-            origin: origin,
-            dest: dest,
-            promote: Piece::Queen,
-            special_move: SpecialMove::Promotion,
-            }, 
-            Move {
-            origin: origin,
-            dest: dest,
-            promote: Piece::Knight,
-            special_move: SpecialMove::Promotion,
+                origin: origin,
+                dest: dest,
+                promote: Piece::Queen,
+                special_move: SpecialMove::Promotion,
             },
             Move {
-            origin: origin,
-            dest: dest,
-            promote: Piece::Bishop,
-            special_move: SpecialMove::Promotion,
+                origin: origin,
+                dest: dest,
+                promote: Piece::Knight,
+                special_move: SpecialMove::Promotion,
             },
             Move {
-            origin: origin,
-            dest: dest,
-            promote: Piece::Rook,
-            special_move: SpecialMove::Promotion,
+                origin: origin,
+                dest: dest,
+                promote: Piece::Bishop,
+                special_move: SpecialMove::Promotion,
+            },
+            Move {
+                origin: origin,
+                dest: dest,
+                promote: Piece::Rook,
+                special_move: SpecialMove::Promotion,
             },
         ]
     }
@@ -92,6 +92,16 @@ const KNIGHT: [(i32, i32); 8] = [
 ];
 
 pub fn get_moves(board: &Board, origin: Position) -> Vec<Move> {
+    get_unchecked_moves(board, origin)
+        // filter out check moves
+        .into_iter()
+        .filter(|m| !would_check(board, m))
+        .collect()
+}
+
+pub fn get_unchecked_moves(board: &Board, origin: Position) -> Vec<Move> {
+    // get all moves but dont verify that king is under attack,
+    //used in check_detection to not get infinite loop
     let (piece, Some(color)) = board.get_piece_and_color(origin) else {
         return Vec::new();
     };
@@ -103,9 +113,7 @@ pub fn get_moves(board: &Board, origin: Position) -> Vec<Move> {
         Piece::Queen => queen_moves(board, origin, color),
         Piece::King => king_moves(board, origin, color),
         Piece::None => Vec::new(),
-    // filter moves that would result in check
-    }.into_iter().filter(|m| would_check(board, *m)).collect()
-
+    }
 }
 
 fn pawn_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
@@ -118,7 +126,7 @@ fn pawn_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
             let start_y: usize = if piece_color { 1 } else { 6 };
             if start_y == origin.y {
                 if let Ok(d_front) = front.add_scalars((0, forward_dir)) {
-                    if let (_, None) = board.get_piece_and_color(front) {
+                    if let (_, None) = board.get_piece_and_color(d_front) {
                         result.push(Move::new_default(origin, d_front));
                     }
                 }
@@ -126,14 +134,15 @@ fn pawn_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
             // promotion
             if front.y == 0 || front.y == 7 {
                 result.extend_from_slice(&Move::new_promote(origin, front))
-            }
-            else {
+            } else {
                 result.push(Move::new_default(origin, front));
             }
         }
     }
     for direction in [-1, 1] {
-        let Ok(diag) = origin.add_scalars((direction, forward_dir))  else { continue };
+        let Ok(diag) = origin.add_scalars((direction, forward_dir)) else {
+            continue;
+        };
         match board.get_piece_and_color(diag) {
             // enemy tile on diagonals
             (_, Some(color)) if color != piece_color => {
@@ -142,12 +151,17 @@ fn pawn_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
             _ => (),
         }
 
-        // en passant 
+        // en passant
         if let Some(enemy_double_move) = board.en_passant {
             if let Ok(neighbor) = origin.add_scalars((direction, 0)) {
                 if enemy_double_move == neighbor {
-                    result.push(Move::new(origin, diag, Piece::Queen, SpecialMove::EnPassant));   
-                }   
+                    result.push(Move::new(
+                        origin,
+                        diag,
+                        Piece::Queen,
+                        SpecialMove::EnPassant,
+                    ));
+                }
             }
         }
     }
@@ -210,6 +224,7 @@ fn specified_positions_moves(
         match board.get_piece_and_color(new_position) {
             // our piece
             (_, Some(color)) if color == piece_color => (),
+            (_, Some(_)) => result.push(Move::new_default(origin, new_position)),
             _ => result.push(Move::new_default(origin, new_position)),
         }
     }
@@ -217,14 +232,14 @@ fn specified_positions_moves(
 }
 
 fn knight_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
-    return sliding_piece_moves(board, origin, piece_color, &KNIGHT);
+    return specified_positions_moves(board, origin, piece_color, &KNIGHT);
 }
 
-fn would_check(board: &Board, move_: Move) -> bool {
+fn would_check(board: &Board, move_: &Move) -> bool {
     let mut board_cpy = *board;
 
     board_cpy.commit_verified_move(move_);
-    return board_cpy.in_check(None);
+    return board_cpy.in_check(Some(board.white_turn));
 }
 
 fn king_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
@@ -237,38 +252,66 @@ fn king_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
     ));
 
     // castle
-    if ! board.in_check(None) {
-        if board.can_castle(false){
+    if !board.in_check(None) {
+        if board.can_castle(false) {
             let mut empty_space = true;
             for i in 1..4 {
-                if let (_, Some(_)) = board.get_piece_and_color(Position { x:i as usize, y: origin.y }) {
+                if let (_, Some(_)) = board.get_piece_and_color(Position {
+                    x: i as usize,
+                    y: origin.y,
+                }) {
                     empty_space = false;
                 }
             }
             // square king moves over is not under attack
-            if empty_space && !would_check(board, Move { 
-                origin: origin, 
-                dest: Position { x: 4, y: origin.y}, 
-                promote: Piece::Queen, 
-                special_move: SpecialMove::None}) {
-                    moves.push(Move::new(origin, Position { x: 3, y: origin.y }, Piece::Queen, SpecialMove::KingCastle));
-                }
+            if empty_space
+                && !would_check(
+                    board,
+                    &Move {
+                        origin: origin,
+                        dest: Position { x: 3, y: origin.y },
+                        promote: Piece::Queen,
+                        special_move: SpecialMove::None,
+                    },
+                )
+            {
+                moves.push(Move::new(
+                    origin,
+                    Position { x: 2, y: origin.y },
+                    Piece::Queen,
+                    SpecialMove::QueenCastle,
+                ));
+            }
         }
-        if board.can_castle(true){
+        if board.can_castle(true) {
             let mut empty_space = true;
             for i in 5..7 {
-                if let (_, Some(_)) = board.get_piece_and_color(Position { x:i as usize, y: origin.y }) {
+                if let (_, Some(_)) = board.get_piece_and_color(Position {
+                    x: i as usize,
+                    y: origin.y,
+                }) {
                     empty_space = false;
                 }
             }
             // the square king moves over is not under attack
-            if empty_space && !would_check(board, Move { 
-                origin: origin, 
-                dest: Position { x: 5, y: origin.y}, 
-                promote: Piece::Queen, 
-                special_move: SpecialMove::None}) {
-                    moves.push(Move::new(origin, Position { x: 6, y: origin.y }, Piece::Queen, SpecialMove::KingCastle));
-                }
+            if empty_space
+                && !would_check(
+                    board,
+                    &Move {
+                        origin: origin,
+                        dest: Position { x: 5, y: origin.y },
+                        promote: Piece::Queen,
+                        special_move: SpecialMove::None,
+                    },
+                )
+            {
+                moves.push(Move::new(
+                    origin,
+                    Position { x: 6, y: origin.y },
+                    Piece::Queen,
+                    SpecialMove::KingCastle,
+                ));
+            }
         }
     }
     return moves;
