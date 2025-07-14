@@ -14,37 +14,39 @@ struct PerftTestCase<'a> {
 
 #[test]
 fn run_perft_tests() {
+    // test taken from https://www.chessprogramming.org/Perft_Results
+
     let tests = [
+        PerftTestCase {
+            description: "Initial position, depth 5",
+            fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            depth: 5,
+            expected_nodes: 4865609,
+        },
         PerftTestCase {
             description: "Kiwipete position, depth 2",
             fen: "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
             depth: 2,
             expected_nodes: 2039,
         },
-        // PerftTestCase {
-        //     description: "Initial position, depth 1",
-        //     fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        //     depth: 1,
-        //     expected_nodes: 20,
-        // },
-        // PerftTestCase {
-        //     description: "Initial position, depth 2",
-        //     fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        //     depth: 2,
-        //     expected_nodes: 400,
-        // },
-        // PerftTestCase {
-        //     description: "Position after 1.e4, depth 1",
-        //     fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
-        //     depth: 1,
-        //     expected_nodes: 20,
-        // },
-        // PerftTestCase {
-        //     description: "Kiwipete position, depth 3",
-        //     fen: "r3k2r/p1pp1pb1/bn2Qnp1/2qPN3/1p2P3/2N2P2/PPPBB1PP/R3K2R w KQkq - 0 1",
-        //     depth: 3,
-        //     expected_nodes: 97862,
-        // },
+        PerftTestCase {
+            description: "Kiwipete position, depth 4",
+            fen: "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            depth: 4,
+            expected_nodes: 4085603,
+        },
+        PerftTestCase {
+            description: "Position 3 depth 5",
+            fen: "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ",
+            depth: 5,
+            expected_nodes: 674624,
+        },
+        PerftTestCase {
+            description: "Position 4 depth 4",
+            fen: "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            depth: 4,
+            expected_nodes: 422333,
+        },
     ];
 
     for test in tests.iter() {

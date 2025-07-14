@@ -148,7 +148,12 @@ fn pawn_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
         match board.get_piece_and_color(diag) {
             // enemy tile on diagonals
             (_, Some(color)) if color != piece_color => {
-                result.push(Move::new_default(origin, diag))
+                // promotion
+                if diag.y == 0 || diag.y == 7 {
+                    result.extend_from_slice(&Move::new_promote(origin, diag))
+                } else {
+                    result.push(Move::new_default(origin, diag))
+                }
             }
             _ => (),
         }
@@ -255,7 +260,7 @@ fn king_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
 
     // castle
     if !board.in_check(None) {
-        if board.can_castle(false) {
+        if board.can_castle(piece_color, false) {
             let mut empty_space = true;
             for i in 1..4 {
                 if let (_, Some(_)) = board.get_piece_and_color(Position {
@@ -285,7 +290,7 @@ fn king_moves(board: &Board, origin: Position, piece_color: bool) -> Vec<Move> {
                 ));
             }
         }
-        if board.can_castle(true) {
+        if board.can_castle(piece_color, true) {
             let mut empty_space = true;
             for i in 5..7 {
                 if let (_, Some(_)) = board.get_piece_and_color(Position {

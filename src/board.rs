@@ -238,13 +238,13 @@ impl Board {
         board
     }
 
-    pub fn can_castle(&self, king_side: bool) -> bool {
-        let index = 2 * usize::from(self.white_turn) + usize::from(!king_side);
+    pub fn can_castle(&self, color: bool, king_side: bool) -> bool {
+        let index = 2 * usize::from(!color) + usize::from(!king_side);
         return self.possible_castle[index];
     }
 
-    fn update_castle_right(&mut self, king_side: bool) {
-        let index = 2 * usize::from(self.white_turn) + usize::from(!king_side);
+    fn update_castle_right(&mut self, color: bool, king_side: bool) {
+        let index = 2 * usize::from(!color) + usize::from(!king_side);
         self.possible_castle[index] = false;
     }
 
@@ -282,10 +282,12 @@ impl Board {
     pub fn commit_verified_move(&mut self, move_: &Move) {
         // commit move
         // move should be verified before
-        let capture: bool = if let (Piece::None, _) = self.get_piece_and_color(move_.dest) {
-            false
-        } else {
+        let (dest_piece, _) = self.get_piece_and_color(move_.dest);
+
+        let mut capture: bool = if dest_piece != Piece::None {
             true
+        } else {
+            false
         };
         let to_move = *self.get_tile_ref(move_.origin);
         *self.get_tile_ref(move_.dest) = to_move;
@@ -298,20 +300,22 @@ impl Board {
                 *self.get_tile_ref(move_.dest) = (move_.promote, orignal_color);
             }
             SpecialMove::EnPassant => {
-                if let Ok(enemy_pos) = move_.dest.add_scalars((0, -1)) {
+                let backward = if self.white_turn { -1 } else { 1 };
+                if let Ok(enemy_pos) = move_.dest.add_scalars((0, backward)) {
                     *self.get_tile_ref(enemy_pos) = EMPTY_TILE;
+                    capture = true;
                 }
             }
             SpecialMove::KingCastle => {
                 if let Ok(new_rook_pos) = move_.dest.add_scalars((-1, 0)) {
-                    let rook = *self.get_tile_ref(Position { x: 7, y: 0 });
+                    let rook = *self.get_tile_ref(Position { x: 7, y: rook_rank });
                     *self.get_tile_ref(new_rook_pos) = rook;
                     *self.get_tile_ref(Position { x: 7, y: rook_rank }) = EMPTY_TILE;
                 }
             }
             SpecialMove::QueenCastle => {
                 if let Ok(new_rook_pos) = move_.dest.add_scalars((1, 0)) {
-                    let rook = *self.get_tile_ref(Position { x: 0, y: 0 });
+                    let rook = *self.get_tile_ref(Position { x: 0, y: rook_rank });
                     *self.get_tile_ref(new_rook_pos) = rook;
                     *self.get_tile_ref(Position { x: 0, y: rook_rank }) = EMPTY_TILE;
                 }
@@ -334,18 +338,29 @@ impl Board {
                 }
             }
             Piece::King => {
-                self.update_castle_right(true);
-                self.update_castle_right(false);
+                self.update_castle_right(self.white_turn, true);
+                self.update_castle_right(self.white_turn, false);
             }
 
             Piece::Rook => {
                 if move_.origin == (Position { x: 0, y: rook_rank }) {
-                    self.update_castle_right(false);
+                    self.update_castle_right(self.white_turn, false);
                 } else if move_.origin == (Position { x: 7, y: rook_rank }) {
-                    self.update_castle_right(true);
+                    self.update_castle_right(self.white_turn, true);
                 }
             }
             _ => (),
+        }
+        // capture rook, remove castle right
+        let enemy_rook_rank = if self.white_turn { 7 } else { 0 };
+        if dest_piece == Piece::Rook && move_.dest.y == enemy_rook_rank {
+            if move_.dest.x == 0 {
+                self.update_castle_right(!self.white_turn, false);
+            }
+
+            if move_.dest.x == 7 {
+                self.update_castle_right(!self.white_turn, true);
+            }
         }
 
         self.fullmove_count += 1;
@@ -380,7 +395,7 @@ impl Board {
             let Some(is_white) = color else {
                 continue;
             };
-            // our piece or king 
+            // kings cant attack
             if piece == Piece::King {
                 continue;
             }
