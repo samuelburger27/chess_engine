@@ -139,13 +139,13 @@ impl TryFrom<&str> for Piece {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum GameState {
+pub enum GameState {
     Normal,
-    WhiteWon,
-    BlackWon,
-    Draw,
-    WhiteCheck,
-    BlackCheck,
+    // WhiteWon,
+    // BlackWon,
+    // Draw,
+    // WhiteCheck,
+    // BlackCheck,
 }
 
 //const NOT_A_FILE: u64 = 0xfefefefefefefefe;
@@ -154,6 +154,8 @@ enum GameState {
 type Color = Option<bool>;
 type Tile = (Piece, Color);
 
+const WHITE: bool = true;
+// const BLACK:bool = false;
 const EMPTY_TILE: Tile = (Piece::None, None);
 #[derive(Clone, Copy)]
 pub struct Board {
@@ -169,6 +171,9 @@ pub struct Board {
     pub fullmove_count: u32,
     // [white_king_side, white_queen_side, black_king_side, black_queen_side]
     pub possible_castle: [bool; 4],
+
+    white_king: Position,
+    black_king: Position,
 }
 
 pub struct BoardIter<'a> {
@@ -233,9 +238,31 @@ impl Board {
             halfmove_count: halfmove,
             fullmove_count: full_move,
             possible_castle: castle_right,
+            white_king: Position { x: 0, y: 4 },
+            black_king: Position { x: 7, y: 4 },
         };
+        let (wk, bk) = board.find_kings();
+        board.white_king = wk;
+        board.black_king = bk;
         board.update_game_state();
         board
+    }
+    fn find_kings(& self) -> (Position, Position) {
+        let mut white_king = Position { x: 0, y: 4 };
+        let mut black_king =  Position { x: 7, y: 4 };
+        for (pos, (piece, tile)) in self {
+            if let Some(col) = tile {
+                if piece == Piece::King {
+                    if col == WHITE {
+                        white_king = pos;
+                    }
+                    else {
+                        black_king = pos;
+                    }
+                }
+            }
+        }
+        return (white_king, black_king)
     }
 
     pub fn can_castle(&self, color: bool, king_side: bool) -> bool {
@@ -263,20 +290,6 @@ impl Board {
 
     fn get_tile_ref(&mut self, pos: Position) -> &mut Tile {
         return &mut self.board[pos.y][pos.x];
-    }
-
-    pub fn legal_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::new();
-        for (pos, (_, color)) in self {
-            match color {
-                Some(c) if c == self.white_turn => {
-                    moves.append(&mut get_moves(self, pos));
-                }
-                _ => continue,
-            }
-        }
-
-        return moves;
     }
 
     pub fn commit_verified_move(&mut self, move_: &Move) {
@@ -340,6 +353,12 @@ impl Board {
             Piece::King => {
                 self.update_castle_right(self.white_turn, true);
                 self.update_castle_right(self.white_turn, false);
+                // update king pos
+                if self.white_turn == WHITE {
+                    self.white_king = move_.dest;
+                } else {
+                    self.black_king = move_.dest;
+                }
             }
 
             Piece::Rook => {
@@ -375,21 +394,8 @@ impl Board {
     pub fn in_check(&self, king_color: Color) -> bool {
         // maybe keep king pos in the structure
         // if no color is provided use current player turn
-        let col = if let Some(c) = king_color {
-            c
-        } else {
-            self.white_turn
-        };
-        let mut king: Option<Position> = None;
-        for (pos, (piece, color)) in self {
-            let Some(is_white) = color else {
-                continue;
-            };
-            if is_white == col && piece == Piece::King {
-                king = Some(pos);
-            }
-        }
-        let Some(king_pos) = king else { return false };
+        let col = if let Some(c) = king_color {c} else {self.white_turn};
+        let king_pos = if col == WHITE { self.white_king} else {self.black_king};
 
         for (pos, (piece, color)) in self {
             let Some(is_white) = color else {
