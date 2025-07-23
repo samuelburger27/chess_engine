@@ -159,7 +159,6 @@ const WHITE: bool = true;
 const EMPTY_TILE: Tile = (Piece::None, None);
 #[derive(Clone, Copy)]
 pub struct Board {
-    pub board: [[Tile; 8]; 8],
     // white_bitboards: [u64; 6],
     // black_bitboards: [u64; 6],
     pub game_state: GameState,
@@ -169,9 +168,9 @@ pub struct Board {
 
     pub halfmove_count: u32,
     pub fullmove_count: u32,
-    // [white_king_side, white_queen_side, black_king_side, black_queen_side]
-    pub possible_castle: [bool; 4],
 
+    // [white_king_side, white_queen_side, black_king_side, black_queen_side]
+    castle_flags: u8,
     white_king: Position,
     black_king: Position,
 }
