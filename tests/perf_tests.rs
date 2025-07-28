@@ -1,7 +1,5 @@
 pub use chess_engine::{
-    board::{Board, Position},
-    fen_parser::{parse_fen, starting_pos_fen},
-    move_generation::get_moves,
+    board_representation::{board::Board, position::Position},
     perf::perft,
 };
 
@@ -50,7 +48,7 @@ fn run_perft_tests() {
     ];
 
     for test in tests.iter() {
-        if let Ok(board) = parse_fen(test.fen) {
+        if let Ok(board) = Board::from_fen(test.fen) {
             let result = perft(&board, test.depth);
             assert_eq!(
                 result, test.expected_nodes,

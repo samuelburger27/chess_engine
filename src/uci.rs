@@ -1,7 +1,4 @@
-use crate::board::Board;
-use crate::fen_parser::parse_fen;
-use crate::fen_parser::starting_pos_fen;
-use crate::move_generation::get_moves;
+use crate::board_representation::board::Board;
 
 pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     println!("id name RustChessEngine");
@@ -10,7 +7,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut input = String::new();
     let is_ready = true;
-    let mut board: Board = parse_fen(&starting_pos_fen())?;
+    let mut board: Board = Board::new_empty();
 
     std::io::stdin().read_line(&mut input)?;
     while input != "quit\n" {
@@ -39,24 +36,18 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn start_search(board: &Board) {
-    // TODO
-    for (pos, (_, color)) in board {
-        if color == Some(board.white_turn) {
-            let moves = get_moves(&board, pos);
-            if moves.len() == 0 {
-                continue;
-            }
-            let move_to_print = moves[0].to_string();
-            println!("{}", move_to_print);
-            return;
-        }
+    let moves = board.generate_moves(board.turn);
+    if !moves.is_empty() {
+        let move_to_print = moves[0].to_string();
+        println!("{}", move_to_print);
     }
+    // TODO
 }
 
 fn parse_position(parts: &Vec<&str>) -> Result<Board, String> {
     let mut board = match parts[1] {
-        "fen" => parse_fen(parts[2]),
-        "startpos" => parse_fen(&starting_pos_fen()),
+        "fen" => Board::from_fen(parts[2]),
+        "startpos" => Board::new_start_pos(),
         _ => Err("Not a valid position".to_string()),
     }?;
 
