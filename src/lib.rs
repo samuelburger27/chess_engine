@@ -1,3 +1,3 @@
 pub mod board_representation;
-pub mod perf;
+pub mod perft;
 pub mod uci;

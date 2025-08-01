@@ -1,6 +1,6 @@
 use crate::{
     board_representation::board::Board,
-    perf::{self, perft_divide},
+    perft::{self, perft_divide},
 };
 
 pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
