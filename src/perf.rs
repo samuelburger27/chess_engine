@@ -1,32 +1,32 @@
+use crate::board_representation::board::Board;
 
-use crate::board::Board;
-
-
-pub fn perft(board: &Board, depth: u32) -> u64 {
+pub fn perft(board: &mut Board, depth: u32) -> u64 {
     if depth == 0 {
         return 1;
     }
 
     let mut nodes = 0;
-    let moves = board.get_all_moves(None);
+    let moves = board.generate_moves(board.turn);
 
     for mv in moves {
-        let mut new_board = *board;
-        new_board.commit_verified_move(&mv);
-        nodes += perft(&new_board, depth - 1);
+        let mut new_board = board.clone();
+        new_board.commit_verified_move(mv);
+        nodes += perft(&mut new_board, depth - 1);
     }
 
     nodes
 }
 
-pub fn perft_divide(board: &Board, depth: u32) {
-    let moves = board.get_all_moves(None);
+pub fn perft_divide(board: &mut Board, depth: u32) {
+    let moves = board.generate_moves(board.turn);
     let mut total_nodes = 0;
 
     for mv in moves {
-        let mut new_board = *board;
-        new_board.commit_verified_move(&mv);
-        let nodes = perft(&new_board, depth - 1);
+        let mut new_board = board.clone();
+        new_board.commit_verified_move(mv);
+        //println!("Board after playing {}", mv.to_string());
+        //new_board.print_board();
+        let nodes = perft(&mut new_board, depth - 1);
         println!("{}: {}", mv.to_string(), nodes);
         total_nodes += nodes;
     }
