@@ -1,6 +1,6 @@
 use crate::board_representation::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Position(usize);
 
 impl Position {
@@ -8,9 +8,12 @@ impl Position {
         assert!(index < 64, "Index must be between 0 and 63");
         Self(index)
     }
-    
+
     pub const fn from_file_and_rank(file: usize, rank: usize) -> Position {
-        assert!(file < 8 && rank < 8, "File and rank must be between 0 and 7");
+        assert!(
+            file < 8 && rank < 8,
+            "File and rank must be between 0 and 7"
+        );
         Self(rank * 8 + file)
     }
 
@@ -20,11 +23,19 @@ impl Position {
         return (file, rank);
     }
 
-    pub const fn try_offset(&self, d_file: i8, d_rank: i8) -> Option<Self> {
+    pub const fn try_rank_file_offset(&self, d_file: i8, d_rank: i8) -> Option<Self> {
         let file = (self.0 % 8) as i8 + d_file;
         let rank = (self.0 / 8) as i8 + d_rank;
         if file >= 0 && rank >= 0 && file < 8 && rank < 8 {
             return Some(Position::from_file_and_rank(file as usize, rank as usize));
+        }
+        None
+    }
+
+    pub fn try_offset(&self, offset: i8) -> Option<Self> {
+        let index = self.0 as i8 + offset;
+        if index >= 0 && index < 64 {
+            return Some(Position(index as usize));
         }
         None
     }

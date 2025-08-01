@@ -1,5 +1,4 @@
 use super::r#const::EMPTY_BIT_B;
-use crate::board_representation::bitboard::Bitboard;
 use crate::board_representation::board::{Board, Turn, BLACK, PLAYER_COUNT, WHITE};
 use crate::board_representation::castle_rights::CastleRights;
 use crate::board_representation::piece::{Piece, PIECE_COUNT};
@@ -72,11 +71,11 @@ impl Board {
         }
         // halfmove count
         let halfmove_count = parts[4]
-            .parse::<u32>()
+            .parse::<u8>()
             .map_err(|_| "Invalid halfmove clock")?;
 
         // fullmove
-        let full_move = parts[5].parse::<u32>().map_err(|_| "Invalid fullmove")?;
+        let full_move = parts[5].parse::<u16>().map_err(|_| "Invalid fullmove")?;
 
         Ok(Board::new_from_bitboards(
             piece_boards,

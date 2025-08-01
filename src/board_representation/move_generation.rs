@@ -2,8 +2,9 @@ use crate::board_representation::computed_boards::{
     BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS,
 };
 use crate::board_representation::r#const::{
-    B_KING_SIDE_BISHOP_START, B_QUEEN_START, NORTH, NORTH_EAST, NORTH_WEST, SOUTH, SOUTH_EAST,
-    SOUTH_WEST, W_KING_SIDE_BISHOP_START, W_QUEEN_START,
+    B_KING_ROOK_START, B_KING_SIDE_BISHOP_START, B_KING_START, B_QUEEN_START, NORTH, NORTH_EAST,
+    NORTH_WEST, SOUTH, SOUTH_EAST, SOUTH_WEST, W_KING_SIDE_BISHOP_START, W_KING_START,
+    W_QUEEN_START,
 };
 
 use super::bitboard::Bitboard;
@@ -16,12 +17,16 @@ use super::r#const::EMPTY_BIT_B;
 use super::r#move::{Move, EN_PASSANT};
 
 impl Board {
-    pub fn generate_moves(&self, turn: Turn) -> Vec<Move> {
-        return generate_pseudo_legal_moves(self, turn);
+    pub fn generate_moves(&mut self, turn: Turn) -> Vec<Move> {
+        generate_pseudo_legal_moves(self, self.turn)
+            .iter()
+            .filter(|m| !self.would_check(**m))
+            .cloned()
+            .collect()
     }
 }
 
-pub fn generate_pseudo_legal_moves(board: &Board, turn: Turn) -> Vec<Move> {
+pub fn generate_pseudo_legal_moves(board: &mut Board, turn: Turn) -> Vec<Move> {
     let mut moves = generate_pseudo_non_castle_moves(board, turn);
     castle_moves(board, turn, &mut moves);
     moves
@@ -30,7 +35,7 @@ pub fn generate_pseudo_legal_moves(board: &Board, turn: Turn) -> Vec<Move> {
 pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> {
     // skip castle moves, used when checking for checks to avoid inf loop
     let mut moves = Vec::new();
-    //sliding_pieces_moves(board, turn, &mut moves);
+    sliding_pieces_moves(board, turn, &mut moves);
     knight_moves(board, turn, &mut moves);
     king_ring_moves(board, turn, &mut moves);
     pawn_moves(board, turn, &mut moves);
@@ -46,7 +51,7 @@ pub(crate) fn get_sliding_moves(
     for &(df, dr) in deltas {
         let mut ray = pos;
         while !blockers.is_square_set(ray.as_usize()) {
-            if let Some(shifted) = ray.try_offset(df, dr) {
+            if let Some(shifted) = ray.try_rank_file_offset(df, dr) {
                 ray = shifted;
                 moves |= ray.bitboard();
             } else {
@@ -116,19 +121,19 @@ fn pawn_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let r_dir = if turn == WHITE {
         NORTH_EAST
     } else {
-        SOUTH_WEST
+        SOUTH_EAST
     };
     let l_dir = if turn == WHITE {
         NORTH_WEST
     } else {
-        SOUTH_EAST
+        SOUTH_WEST
     };
-    let right_captures = (pawns & NOT_A_FILE) << r_dir & enemy_pieces;
-    let left_captures = (pawns & NOT_H_FILE) << l_dir & enemy_pieces;
+    let right_captures = ((pawns & NOT_H_FILE) << r_dir) & enemy_pieces;
+    let left_captures = ((pawns & NOT_A_FILE) << l_dir) & enemy_pieces;
 
     // en passant
-    let right_en_p = (pawns & NOT_A_FILE) << r_dir & board.en_passant;
-    let left_en_p = (pawns & NOT_H_FILE) << l_dir & board.en_passant;
+    let right_en_p = ((pawns & NOT_H_FILE) << r_dir) & board.en_passant;
+    let left_en_p = ((pawns & NOT_A_FILE) << l_dir) & board.en_passant;
     // TODO maybe rewrite to separate function
     if left_en_p.is_not_empty() {
         let dest = left_en_p.trailing_zeros();
@@ -174,18 +179,20 @@ fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
         let magic_entry = ROOK_MAGICS[origin];
         let moves_bb =
             ROOK_ATTACKS[magic_entry.magic_index(relevant_blockers) + magic_entry.offset];
-        extract_moves(moves_bb, origin, moves);
+        let legal_bb = moves_bb & !board.player_boards[turn as usize];
+        extract_moves(legal_bb, origin, moves);
         rook_board.reset_lsb();
     }
     // bishop moves
-    let mut bishop_board = board.get_piece_bitboard(Piece::Rook, turn) | queen_board;
+    let mut bishop_board = board.get_piece_bitboard(Piece::Bishop, turn) | queen_board;
     while bishop_board.is_not_empty() {
         let origin = bishop_board.trailing_zeros();
         let relevant_blockers = !board.empty_tiles & BISHOP_BLOCKERS[origin];
         let magic_entry = BISHOP_MAGICS[origin];
         let moves_bb =
             BISHOP_ATTACKS[magic_entry.magic_index(relevant_blockers) + magic_entry.offset];
-        extract_moves(moves_bb, origin, moves);
+        let legal_bb = moves_bb & !board.player_boards[turn as usize];
+        extract_moves(legal_bb, origin, moves);
         bishop_board.reset_lsb();
     }
 }
@@ -210,7 +217,7 @@ fn king_ring_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     extract_moves(ring_moves, origin, moves);
 }
 
-fn castle_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
+fn castle_moves(board: &mut Board, turn: Turn, moves: &mut Vec<Move>) {
     let castle_data = [
         (
             false,
@@ -224,7 +231,7 @@ fn castle_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
         ),
     ];
     if !board.in_check(turn) {
-        for (king_side, move_over_tiles, empty_tiles) in castle_data {
+        for (king_side, move_over_tile, empty_tiles) in castle_data {
             if !board.castle_rights.can_castle(turn, king_side) {
                 continue;
             }
@@ -232,8 +239,14 @@ fn castle_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
             // check that space between rook and king is empty
             if (empty_space & board.empty_tiles) == empty_space {
                 // tile between king and destination square is not under attack
-                let slide_tile = move_over_tiles[turn as usize];
-                if !board.tile_under_attack(slide_tile, !turn) {
+                let king_pos = if turn == WHITE {
+                    W_KING_START
+                } else {
+                    B_KING_START
+                };
+                let slide_tile = move_over_tile[turn as usize];
+                let slide_move = Move::new_default(king_pos, slide_tile);
+                if !board.would_check(slide_move) {
                     moves.push(Move::new_castle(king_side, turn));
                 }
             }

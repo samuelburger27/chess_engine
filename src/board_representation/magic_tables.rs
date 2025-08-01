@@ -91,6 +91,7 @@ fn find_and_print_all_magics(
     slider_name: &str,
     rng: &mut Mcg128Xsl64,
 ) {
+    println!("#[rustfmt::skip]");
     println!(
         "pub const {}_MAGICS: &[MagicEntry; MAX_POS] = &[",
         slider_name

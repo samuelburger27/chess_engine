@@ -1,5 +1,6 @@
 use super::bitboard::Bitboard;
 use super::castle_rights::CastleRights;
+use super::game_state::StateDelta;
 use super::move_generation::*;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
@@ -9,7 +10,7 @@ use crate::board_representation::{
     piece::{Piece, PIECE_COUNT},
     r#const::{
         B_KING_ROOK_START, B_KING_SIDE_BISHOP_START, B_QUEEN_ROOK_START, B_QUEEN_START, NORTH,
-        SOUTH, W_KING_ROOK_START, W_QUEEN_ROOK_START, W_QUEEN_START,
+        SOUTH, W_KING_ROOK_START, W_KING_SIDE_BISHOP_START, W_QUEEN_ROOK_START, W_QUEEN_START,
     },
     r#move::SpecialMove,
 };
@@ -21,7 +22,7 @@ pub const BLACK: Turn = true;
 
 type BitboardMutIter<'a> = std::iter::Take<std::iter::Skip<std::slice::IterMut<'a, Bitboard>>>;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Board {
     piece_boards: [Bitboard; PLAYER_COUNT * PIECE_COUNT],
     pub player_boards: [Bitboard; PLAYER_COUNT],
@@ -31,10 +32,12 @@ pub struct Board {
     // position that enemy should attack at will be recorded here
     pub en_passant: Bitboard,
 
-    pub halfmove_count: u32,
-    pub fullmove_count: u32,
+    pub halfmove_count: u8,
+    pub fullmove_count: u16,
 
     pub castle_rights: CastleRights,
+
+    history: Vec<StateDelta>,
 }
 
 impl Board {
@@ -61,6 +64,7 @@ impl Board {
             halfmove_count: 0,
             fullmove_count: 0,
             castle_rights: CastleRights::make_default(),
+            history: Vec::new(),
         }
     }
 
@@ -68,8 +72,8 @@ impl Board {
         piece_boards: [Bitboard; PLAYER_COUNT * PIECE_COUNT],
         turn: Turn,
         en_passant: Bitboard,
-        halfmove: u32,
-        fullmove: u32,
+        halfmove: u8,
+        fullmove: u16,
         castle_rights: CastleRights,
     ) -> Self {
         let mut board = Board::new_empty();
@@ -80,7 +84,6 @@ impl Board {
         board.fullmove_count = fullmove;
         board.castle_rights = castle_rights;
         board.compute_bitboards();
-
         board
     }
     pub fn new_start_pos() -> Result<Board, String> {
@@ -96,7 +99,7 @@ impl Board {
             black_pieces |= self.piece_boards[index + PIECE_COUNT];
         }
         self.player_boards = [white_pieces, black_pieces];
-        self.empty_tiles = !(white_pieces & black_pieces);
+        self.empty_tiles = !(white_pieces | black_pieces);
     }
 
     pub fn get_piece_bitboard(&self, piece: Piece, turn: Turn) -> Bitboard {
@@ -131,10 +134,17 @@ impl Board {
         // TODO, draw, stalemate
     }
 
+    pub fn would_check(&mut self, move_: Move) -> bool {
+        self.commit_verified_move(move_);
+        let is_check = self.in_check(!self.turn);
+        self.unmake_move();
+        return is_check;
+    }
+
     fn get_piece_type_containing_position(&self, pos: Position) -> Piece {
         for (index, board) in self.piece_boards.iter().enumerate() {
             if board.is_square_set(pos.into()) {
-                return Piece::from(index - PIECE_COUNT * self.turn as usize);
+                return Piece::from(index % PIECE_COUNT);
             }
         }
         return Piece::None;
@@ -147,12 +157,15 @@ impl Board {
             .take(PIECE_COUNT)
     }
 
-    pub fn commit_verified_move(&mut self, move_: &Move) {
+    pub fn commit_verified_move(&mut self, move_: Move) {
         // commit move
         // move should be verified before
         let (origin, destination) = move_.get_org_and_dest();
-
-        let mut capture: bool = !self.empty_tiles.is_square_set(destination.into());
+        let mut captured_piece = if !self.empty_tiles.is_square_set(destination.into()) {
+            Some(self.get_piece_type_containing_position(destination))
+        } else {
+            None
+        };
 
         let moving_piece = self.get_piece_type_containing_position(origin);
 
@@ -174,10 +187,10 @@ impl Board {
             }
 
             SpecialMove::Castle => {
-                let (_, dest_rank) = destination.get_file_and_rank();
+                let (dest_file, _) = destination.get_file_and_rank();
                 let rook_bb_i = Board::get_bb_index(Piece::Rook, self.turn);
                 // queen side
-                if dest_rank == 2 {
+                if dest_file == 2 {
                     if self.turn == WHITE {
                         self.piece_boards[rook_bb_i].clear_square(W_QUEEN_ROOK_START.into());
                         self.piece_boards[rook_bb_i].set_square(W_QUEEN_START.into());
@@ -190,7 +203,7 @@ impl Board {
                 else {
                     if self.turn == WHITE {
                         self.piece_boards[rook_bb_i].clear_square(W_KING_ROOK_START.into());
-                        self.piece_boards[rook_bb_i].set_square(B_KING_SIDE_BISHOP_START.into());
+                        self.piece_boards[rook_bb_i].set_square(W_KING_SIDE_BISHOP_START.into());
                     } else {
                         self.piece_boards[rook_bb_i].clear_square(B_KING_ROOK_START.into());
                         self.piece_boards[rook_bb_i].set_square(B_KING_SIDE_BISHOP_START.into());
@@ -202,15 +215,24 @@ impl Board {
                 let backward = if self.turn == WHITE { SOUTH } else { NORTH };
                 let enemy_pawns = self.get_piece_bitboard_ref(Piece::Pawn, !self.turn);
                 enemy_pawns.clear_square((destination.as_usize() as i8 + backward) as usize);
-                capture = true;
+                captured_piece = Some(Piece::Pawn);
             }
 
             SpecialMove::NormalMove => (),
         }
 
-        // update board state
+        self.history.push(StateDelta::new(
+            move_,
+            captured_piece,
+            self.en_passant,
+            self.castle_rights,
+            self.halfmove_count,
+        ));
+
         let pawn_moved = moving_piece == Piece::Pawn;
 
+        // update board state
+        self.en_passant = Bitboard::new();
         match moving_piece {
             Piece::Pawn => {
                 // en passant
@@ -218,7 +240,6 @@ impl Board {
                     // middle between des and origin
                     let en_passant_square = (origin.as_usize() + destination.as_usize()) / 2;
 
-                    self.en_passant = Bitboard::new();
                     self.en_passant.set_square(en_passant_square);
                 }
             }
@@ -247,8 +268,10 @@ impl Board {
         self.captured_rook_remove_castle_rights();
 
         self.fullmove_count += 1;
-        if !capture && !pawn_moved {
-            self.halfmove_count += 1
+        if let None = captured_piece {
+            if !pawn_moved {
+                self.halfmove_count += 1;
+            }
         }
         self.turn = !self.turn;
 
@@ -278,6 +301,80 @@ impl Board {
         }
     }
 
+    fn unmake_move(&mut self) {
+        let Some(move_delta) = self.history.pop() else {
+            return;
+        };
+        self.en_passant = move_delta.en_pass;
+        self.castle_rights = move_delta.castle_rights;
+        self.halfmove_count = move_delta.halfmove;
+        self.fullmove_count -= 1;
+        self.turn = !self.turn;
+
+        let last_move = move_delta.move_;
+        let (origin, dest) = last_move.get_org_and_dest();
+
+        let pawn_bb_index = Board::get_bb_index(Piece::Pawn, self.turn);
+
+        let moving_piece = self.get_piece_type_containing_position(dest);
+        let b_b_index = Board::get_bb_index(moving_piece, self.turn);
+
+        self.piece_boards[b_b_index].set_square(origin.as_usize());
+        self.piece_boards[b_b_index].clear_square(dest.as_usize());
+
+        match last_move.get_special_move() {
+            SpecialMove::NormalMove => {
+                if let Some(captured_piece) = move_delta.captured_piece {
+                    let cap_bb_index = Board::get_bb_index(captured_piece, !self.turn);
+                    self.piece_boards[cap_bb_index].set_square(dest.as_usize());
+                }
+            }
+
+            SpecialMove::Promotion => {
+                if let Some(captured_piece) = move_delta.captured_piece {
+                    let cap_bb_index = Board::get_bb_index(captured_piece, !self.turn);
+                    self.piece_boards[cap_bb_index].set_square(dest.as_usize());
+                }
+                self.piece_boards[b_b_index].clear_square(origin.as_usize());
+                self.piece_boards[pawn_bb_index].set_square(origin.as_usize());
+            }
+
+            SpecialMove::EnPassant => {
+                let backward = if self.turn == WHITE { SOUTH } else { NORTH };
+                if let Some(pawn_pos) = dest.try_offset(backward) {
+                    let enemy_pawn_index = Board::get_bb_index(Piece::Pawn, !self.turn);
+                    self.piece_boards[enemy_pawn_index].set_square(pawn_pos.as_usize());
+                }
+            }
+
+            SpecialMove::Castle => {
+                let (dest_file, _) = dest.get_file_and_rank();
+                let rook_bb_i = Board::get_bb_index(Piece::Rook, self.turn);
+                // queen side
+                if dest_file == 2 {
+                    if self.turn == WHITE {
+                        self.piece_boards[rook_bb_i].set_square(W_QUEEN_ROOK_START.into());
+                        self.piece_boards[rook_bb_i].clear_square(W_QUEEN_START.into());
+                    } else {
+                        self.piece_boards[rook_bb_i].set_square(B_QUEEN_ROOK_START.into());
+                        self.piece_boards[rook_bb_i].clear_square(B_QUEEN_START.into());
+                    }
+                }
+                // king side
+                else {
+                    if self.turn == WHITE {
+                        self.piece_boards[rook_bb_i].set_square(W_KING_ROOK_START.into());
+                        self.piece_boards[rook_bb_i].clear_square(W_KING_SIDE_BISHOP_START.into());
+                    } else {
+                        self.piece_boards[rook_bb_i].set_square(B_KING_ROOK_START.into());
+                        self.piece_boards[rook_bb_i].clear_square(B_KING_SIDE_BISHOP_START.into());
+                    }
+                }
+            }
+        }
+        self.compute_bitboards();
+    }
+
     fn make_input_move(&mut self, origin: Position, dest: Position, promote: Piece) -> bool {
         let moves = self.generate_moves(self.turn);
         for move_ in moves {
@@ -285,7 +382,7 @@ impl Board {
                 && move_.get_dest() == dest
                 && move_.get_promotion() == promote
             {
-                self.commit_verified_move(&move_);
+                self.commit_verified_move(move_);
                 return true;
             }
         }

@@ -1,21 +1,29 @@
-use crate::board_representation::{board::{Turn, WHITE}, r#const::{B_KING_CASTLE_DEST, B_KING_START, B_QUEEN_CASTLE_DEST, W_KING_CASTLE_DEST, W_KING_START, W_QUEEN_CASTLE_DEST}, piece::Piece};
-use super::position::Position;
+use std::fmt::Debug;
 
-#[derive(PartialEq)]
-pub enum SpecialMove{
+use super::position::Position;
+use crate::board_representation::{
+    board::{Turn, WHITE},
+    piece::Piece,
+    r#const::{
+        B_KING_CASTLE_DEST, B_KING_START, B_QUEEN_CASTLE_DEST, W_KING_CASTLE_DEST, W_KING_START,
+        W_QUEEN_CASTLE_DEST,
+    },
+};
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum SpecialMove {
     Promotion,
     EnPassant,
     Castle,
     NormalMove,
 }
 
-
 // 16-bit unsigned integer to represent a move
 // bit 0-5: to square (0-63)
 // bit 6-11: from square (0-63)
 // bit 12-13: promotion piece type (knight, bishop, rook, queen)
 // bit 14-15: special move (promotion, en passant, castling)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Move(u16);
 
 // promotions
@@ -25,15 +33,24 @@ pub const PROMOTE_TO_ROOK: u16 = 0b11 << 12;
 pub const PROMOTE_TO_QUEEN: u16 = 0b00 << 12;
 
 // special moves
-pub const PROMOTION: u16 = 0b00;
+pub const NORMAL_MOVE: u16 = 0b00 << 14;
 pub const EN_PASSANT: u16 = 0b01 << 14;
 pub const CASTLING: u16 = 0b10 << 14;
-pub const NORMAL_MOVE: u16 = 0b11 << 14;
+pub const PROMOTION: u16 = 0b11 << 14;
 
 // default move (promote to queen, no special move)
 const DEFAULT_MOVE: u16 = PROMOTE_TO_QUEEN | NORMAL_MOVE;
 
+// TODO refactor
+
 impl Move {
+    pub fn make_raw(data: u16) -> Move {
+        Move(data)
+    }
+
+    pub fn get_raw(&self) -> u16 {
+        self.0
+    }
 
     pub fn get_dest(&self) -> Position {
         let mask = 0b0000000000111111u16;
@@ -41,8 +58,8 @@ impl Move {
     }
 
     pub fn get_origin(&self) -> Position {
-        let mask = 0b0000111111000000u16;
-        return Position::new((mask & self.0) as usize);
+        let mask = 0b0000_1111_1100_0000u16;
+        return Position::new(((mask & self.0) >> 6) as usize);
     }
 
     pub fn get_org_and_dest(&self) -> (Position, Position) {
@@ -60,20 +77,19 @@ impl Move {
     }
 
     pub fn get_promotion(&self) -> Piece {
-        let mask: u16 = 0b0001100000000000u16;
+        let mask: u16 = 0b0011000000000000u16;
         match self.0 & mask {
             PROMOTE_TO_KNIGHT => Piece::Knight,
             PROMOTE_TO_BISHOP => Piece::Bishop,
-            PROMOTE_TO_QUEEN => Piece::Queen,
             PROMOTE_TO_ROOK => Piece::Rook,
-            _ => Piece::None
+            _ => Piece::Queen,
         }
     }
 
     fn create_move_mask(origin: Position, destination: Position) -> u16 {
-        let from_square = usize::from(origin) as u16;
-        let to_square = usize::from(destination) as u16;
-        to_square | (from_square & 0b00111111 << 6)
+        let origin_square = usize::from(origin) as u16;
+        let dest_square = usize::from(destination) as u16;
+        dest_square | ((origin_square & 0b00111111) << 6)
     }
     // default move, no special move
     pub fn new_default(origin: Position, destination: Position) -> Self {
@@ -101,26 +117,44 @@ impl Move {
         if turn == WHITE {
             if king_side {
                 return Move::new_special(W_KING_START, W_KING_CASTLE_DEST, CASTLING);
-            }
-            else {
+            } else {
                 return Move::new_special(W_KING_START, W_QUEEN_CASTLE_DEST, CASTLING);
             }
+        } else if king_side {
+            return Move::new_special(B_KING_START, B_KING_CASTLE_DEST, CASTLING);
         }
-        else if king_side {
-            return Move::new_special(B_KING_START, B_KING_CASTLE_DEST, CASTLING);    
-        }
-        return Move::new_special(B_KING_START, B_QUEEN_CASTLE_DEST, CASTLING);    
-
-
+        return Move::new_special(B_KING_START, B_QUEEN_CASTLE_DEST, CASTLING);
     }
 }
 
 impl ToString for Move {
     fn to_string(&self) -> String {
-        let mut result = self.get_origin().algebraic_notation() + &self.get_dest().algebraic_notation();
+        let mut result =
+            self.get_origin().algebraic_notation() + &self.get_dest().algebraic_notation();
         if self.get_special_move() == SpecialMove::Promotion {
             result += &self.get_promotion().to_notation();
         }
         return result;
+    }
+}
+
+impl Debug for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let origin = self.get_origin();
+        let dest = self.get_dest();
+        let special = self.get_special_move();
+        let promo = self.get_promotion();
+
+        write!(
+            f,
+            "Move {{\n  raw: {},\n  origin: {} ({:?}),\n  dest: {} ({:?}),\n  special: {:?},\n  promotion: {:?}\n}}",
+            self.0,
+            origin.as_usize(),
+            origin.algebraic_notation(),
+            dest.as_usize(),
+            dest.algebraic_notation(),
+            special,
+            promo
+        )
     }
 }

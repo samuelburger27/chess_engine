@@ -1,4 +1,7 @@
-use crate::board_representation::board::Board;
+use crate::{
+    board_representation::board::Board,
+    perf::{self, perft_divide},
+};
 
 pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     println!("id name RustChessEngine");
@@ -25,7 +28,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "position" => board = parse_position(&parts)?,
-            "go" => start_search(&board),
+            "go" => {parse_go(&parts, &mut board);},
             _ => println!("Invalid command"),
         }
         input.clear();
@@ -35,13 +38,21 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
 }
 
-fn start_search(board: &Board) {
+fn parse_go(parts: &Vec<&str>, board: &mut Board) -> bool {
+    match parts[1] {
+        "perf" => {
+            if let Ok(depth) = parts[2].parse::<u32>() {
+                perft_divide(board, depth);
+            }
+        }
+        _ => println!("Only perf is currently supported"),
+    }
     let moves = board.generate_moves(board.turn);
     if !moves.is_empty() {
         let move_to_print = moves[0].to_string();
         println!("{}", move_to_print);
     }
-    // TODO
+    return true;
 }
 
 fn parse_position(parts: &Vec<&str>) -> Result<Board, String> {

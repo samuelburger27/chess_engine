@@ -1,6 +1,7 @@
+use std::fmt::Debug;
 use crate::board_representation::board::Turn;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct CastleRights {
     // white_king_side, white_queen_side, black_king_side, black_queen_side
     flags: u8,
@@ -39,12 +40,27 @@ impl CastleRights {
     }
 
     pub fn can_castle(&self, turn: Turn, king_side: bool) -> bool {
-        let index = 2 * usize::from(!turn) + usize::from(!king_side);
+        let index = 2 * usize::from(turn) + usize::from(!king_side);
         self.flags & (1 << index) != 0
     }
 
     pub fn remove_castle_right(&mut self, turn: Turn, king_side: bool) {
-        let index = 2 * usize::from(!turn) + usize::from(!king_side);
+        let index = 2 * usize::from(turn) + usize::from(!king_side);
         self.flags &= !(1 << index);
+    }
+}
+
+impl Debug for CastleRights {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let wk = self.flags & WHITE_KING_SIDE != 0;
+        let wq = self.flags & WHITE_QUEEN_SIDE != 0;
+        let bk = self.flags & BLACK_KING_SIDE != 0;
+        let bq = self.flags & BLACK_QUEEN_SIDE != 0;
+
+        write!(
+            f,
+            "CastleRights {{ white_king_side: {}, white_queen_side: {}, black_king_side: {}, black_queen_side: {} }}",
+            wk, wq, bk, bq
+        )
     }
 }
