@@ -24,8 +24,6 @@ pub fn perft_divide(board: &mut Board, depth: u32) {
     for mv in moves {
         let mut new_board = board.clone();
         new_board.commit_verified_move(mv);
-        //println!("Board after playing {}", mv.to_string());
-        //new_board.print_board();
         let nodes = perft(&mut new_board, depth - 1);
         println!("{}: {}", mv.to_string(), nodes);
         total_nodes += nodes;

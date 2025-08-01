@@ -1,6 +1,6 @@
 pub use chess_engine::{
     board_representation::{board::Board, position::Position},
-    perf::perft,
+    perft::perft,
 };
 
 struct PerftTestCase<'a> {
