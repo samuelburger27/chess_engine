@@ -1,6 +1,6 @@
 use crate::{
     board_representation::board::Board,
-    perft::{self, perft_divide},
+    perft::{perft_divide},
 };
 
 pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
 }
 
-fn parse_go(parts: &Vec<&str>, board: &mut Board) -> bool {
+fn parse_go(parts: &[&str], board: &mut Board) -> bool {
     match parts[1] {
         "perf" => {
             if let Ok(depth) = parts[2].parse::<u32>() {
@@ -55,7 +55,7 @@ fn parse_go(parts: &Vec<&str>, board: &mut Board) -> bool {
     return true;
 }
 
-fn parse_position(parts: &Vec<&str>) -> Result<Board, String> {
+fn parse_position(parts: &[&str]) -> Result<Board, String> {
     let mut board = match parts[1] {
         "fen" => Board::from_fen(parts[2]),
         "startpos" => Board::new_start_pos(),

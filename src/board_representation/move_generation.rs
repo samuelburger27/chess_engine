@@ -2,7 +2,7 @@ use crate::board_representation::computed_boards::{
     BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS,
 };
 use crate::board_representation::r#const::{
-    B_KING_ROOK_START, B_KING_SIDE_BISHOP_START, B_KING_START, B_QUEEN_START, NORTH, NORTH_EAST,
+    B_KING_SIDE_BISHOP_START, B_KING_START, B_QUEEN_START, NORTH, NORTH_EAST,
     NORTH_WEST, SOUTH, SOUTH_EAST, SOUTH_WEST, W_KING_SIDE_BISHOP_START, W_KING_START,
     W_QUEEN_START,
 };
@@ -18,7 +18,7 @@ use super::r#move::{Move, EN_PASSANT};
 
 impl Board {
     pub fn generate_moves(&mut self, turn: Turn) -> Vec<Move> {
-        generate_pseudo_legal_moves(self, self.turn)
+        generate_pseudo_legal_moves(self, turn)
             .iter()
             .filter(|m| !self.would_check(**m))
             .cloned()

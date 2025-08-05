@@ -20,5 +20,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     println!("Currently only UCI protocol is supported, stopping");
-    return Ok(());
+    Ok(())
 }

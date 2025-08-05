@@ -103,11 +103,11 @@ impl Board {
     }
 
     pub fn get_piece_bitboard(&self, piece: Piece, turn: Turn) -> Bitboard {
-        return self.piece_boards[Board::get_bb_index(piece, turn)];
+        self.piece_boards[Board::get_bb_index(piece, turn)]
     }
 
     fn get_piece_bitboard_ref(&mut self, piece: Piece, turn: Turn) -> &mut Bitboard {
-        return &mut self.piece_boards[Board::get_bb_index(piece, turn)];
+        &mut self.piece_boards[Board::get_bb_index(piece, turn)]
     }
 
     pub(crate) fn get_bb_index(piece: Piece, turn: Turn) -> usize {
@@ -115,22 +115,18 @@ impl Board {
     }
 
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {
-        let moves = generate_pseudo_non_castle_moves(&self, attacking_player);
+        let moves = generate_pseudo_non_castle_moves(self, attacking_player);
         moves.iter().any(|m| m.get_dest() == tile)
     }
 
     pub fn in_check(&self, turn: Turn) -> bool {
         let king_board = self.get_piece_bitboard(Piece::King, turn);
         let king_pos = Position::new(king_board.trailing_zeros());
-        return self.tile_under_attack(king_pos, !turn);
+        self.tile_under_attack(king_pos, !turn)
     }
 
     fn update_game_state(&mut self) {
         // this method should be called when creating board and when committing a move
-        // if self.in_check(Some(true)) {
-
-        // }
-
         // TODO, draw, stalemate
     }
 
@@ -138,7 +134,7 @@ impl Board {
         self.commit_verified_move(move_);
         let is_check = self.in_check(!self.turn);
         self.unmake_move();
-        return is_check;
+        is_check
     }
 
     fn get_piece_type_containing_position(&self, pos: Position) -> Piece {
@@ -147,7 +143,7 @@ impl Board {
                 return Piece::from(index % PIECE_COUNT);
             }
         }
-        return Piece::None;
+        Piece::None
     }
 
     fn get_player_bit_boards_iter(&mut self, turn: Turn) -> BitboardMutIter {
@@ -277,7 +273,7 @@ impl Board {
 
         self.compute_bitboards();
 
-        //self.update_game_state();
+        self.update_game_state();
     }
 
     fn captured_rook_remove_castle_rights(&mut self) {
@@ -373,6 +369,7 @@ impl Board {
             }
         }
         self.compute_bitboards();
+        self.update_game_state();
     }
 
     fn make_input_move(&mut self, origin: Position, dest: Position, promote: Piece) -> bool {

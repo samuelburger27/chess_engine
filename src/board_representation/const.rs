@@ -30,10 +30,11 @@ pub const NORTH: i8 = 8;
 /// Direction of going south on a chessboard.
 pub const SOUTH: i8 = -8;
 /// Direction of going west on a chessboard.
+#[allow(unused)]
 pub const WEST: i8 = -1;
 /// Direction of going east on a chessboard.
+#[allow(unused)]
 pub const EAST: i8 = 1;
-
 /// Direction of going northeast on a chessboard.
 pub const NORTH_EAST: i8 = 9;
 /// Direction of going northwest on a chessboard.

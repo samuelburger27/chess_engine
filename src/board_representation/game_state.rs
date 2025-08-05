@@ -1,8 +1,10 @@
-use crate::board_representation::{bitboard::Bitboard, castle_rights::{self, CastleRights}, r#move::{Move, SpecialMove}, piece::Piece};
+use crate::board_representation::{
+    bitboard::Bitboard, castle_rights::CastleRights, piece::Piece, r#move::Move,
+};
 
 // used for undoing moves
 #[derive(Clone, Debug, PartialEq)]
-pub struct StateDelta{
+pub struct StateDelta {
     pub move_: Move,
     pub captured_piece: Option<Piece>,
     pub en_pass: Bitboard,
@@ -12,9 +14,19 @@ pub struct StateDelta{
 }
 
 impl StateDelta {
-
-    pub fn new(move_: Move, captured_piece: Option<Piece>, en_p: Bitboard, castle_rights: CastleRights, halfmove: u8) -> StateDelta {
-        StateDelta { move_: move_, captured_piece: captured_piece, en_pass: en_p, castle_rights: castle_rights, halfmove: halfmove }
+    pub fn new(
+        move_: Move,
+        captured_piece: Option<Piece>,
+        en_pass: Bitboard,
+        castle_rights: CastleRights,
+        halfmove: u8,
+    ) -> StateDelta {
+        StateDelta {
+            move_,
+            captured_piece,
+            en_pass,
+            castle_rights,
+            halfmove,
+        }
     }
-    
 }
