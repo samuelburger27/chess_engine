@@ -1,10 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::board_representation::{
-    magic_tables::MagicEntry,
-    move_generation::get_sliding_moves,
-    position::Position,
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, MAX_POS, ROOK_DELTAS},
+    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, MAX_POS, ROOK_DELTAS}, magic_tables::MagicEntry, move_generation::get_sliding_moves, position::Position, zobrist::ZobristTable
 };
 
 use super::bitboard::Bitboard;
@@ -20,6 +17,9 @@ pub static BISHOP_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
 });
 pub static ROOK_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&ROOK_DELTAS, ROOK_MAGICS, ROOK_TABLE_SIZE)
+});
+pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| {
+    ZobristTable::new(Some(1234))
 });
 
 fn generate_slide_piece_attack_tables(

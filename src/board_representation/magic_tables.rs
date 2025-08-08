@@ -6,7 +6,7 @@ use crate::board_representation::{
     r#const::{BISHOP_DELTAS, EMPTY_BIT_B, MAX_POS, ROOK_DELTAS},
 };
 use rand::{Rng, SeedableRng};
-use rand_pcg::{Mcg128Xsl64, Pcg64Mcg};
+use rand_pcg::Pcg64Mcg;
 
 // inspired by https://analog-hors.github.io/site/magic-bitboards/
 
@@ -34,7 +34,7 @@ fn find_magic(
     blockers: &[Bitboard],
     pos: Position,
     index_bits: u8,
-    rng: &mut Mcg128Xsl64,
+    rng: &mut Pcg64Mcg,
 ) -> (MagicEntry, Vec<Bitboard>) {
     let mask = blockers[pos.as_usize()];
     let shift = 64 - index_bits;
@@ -89,7 +89,7 @@ fn find_and_print_all_magics(
     deltas: &[(i8, i8); 4],
     blockers: &[Bitboard],
     slider_name: &str,
-    rng: &mut Mcg128Xsl64,
+    rng: &mut Pcg64Mcg,
 ) {
     println!("#[rustfmt::skip]");
     println!(

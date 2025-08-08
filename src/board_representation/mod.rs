@@ -12,3 +12,5 @@ mod bitboard;
 mod masks;
 mod fen_parser;
 mod r#const;
+mod zobrist;
+mod make_move;

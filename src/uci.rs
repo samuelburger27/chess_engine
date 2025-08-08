@@ -10,7 +10,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut input = String::new();
     let is_ready = true;
-    let mut board: Board = Board::new_empty();
+    let mut board: Board = Board::new_start_pos()?;
 
     std::io::stdin().read_line(&mut input)?;
     while input != "quit\n" {

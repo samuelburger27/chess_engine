@@ -48,6 +48,10 @@ impl CastleRights {
         let index = 2 * usize::from(turn) + usize::from(!king_side);
         self.flags &= !(1 << index);
     }
+
+    pub fn castle_at_index(&self, index: usize) -> bool {
+        self.flags & (1 << index) != 0
+    }
 }
 
 impl Debug for CastleRights {
