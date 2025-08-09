@@ -3,7 +3,7 @@ use crate::board_representation::{
     computed_boards::{BISHOP_BLOCKERS, ROOK_BLOCKERS},
     move_generation::get_sliding_moves,
     position::Position,
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, MAX_POS, ROOK_DELTAS},
+    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
 };
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
@@ -59,7 +59,7 @@ fn try_make_table(
     pos: Position,
     magic_entry: &MagicEntry,
 ) -> Result<Vec<Bitboard>, String> {
-    let index_bits = MAX_POS as u8 - magic_entry.shift;
+    let index_bits = Position::MAX_POS as u8 - magic_entry.shift;
     let mut table = vec![EMPTY_BIT_B; 1 << index_bits];
     // Iterate all configurations of blockers
     let mut blockers = EMPTY_BIT_B;

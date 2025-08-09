@@ -2,8 +2,6 @@ use crate::board_representation::{bitboard::Bitboard, position::Position};
 
 pub const EMPTY_BIT_B: Bitboard = Bitboard::new();
 
-pub const MAX_POS: usize = 64;
-
 pub const W_QUEEN_START: Position = Position::from_file_and_rank(3, 0);
 pub const B_QUEEN_START: Position = Position::from_file_and_rank(3, 7);
 

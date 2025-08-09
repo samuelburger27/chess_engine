@@ -1,16 +1,16 @@
 use std::sync::LazyLock;
 
 use crate::board_representation::{
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, MAX_POS, ROOK_DELTAS}, magic_tables::MagicEntry, move_generation::get_sliding_moves, position::Position, zobrist::ZobristTable
+    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS}, magic_tables::MagicEntry, move_generation::get_sliding_moves, position::Position, zobrist::ZobristTable
 };
 
 use super::bitboard::Bitboard;
 
-pub const KNIGHT_MOVES: [Bitboard; MAX_POS] = generate_knight_moves();
-pub const KING_RING_MOVES: [Bitboard; MAX_POS] = generate_king_ring_moves();
+pub const KNIGHT_MOVES: [Bitboard; Position::MAX_POS] = generate_knight_moves();
+pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_moves();
 
-pub const ROOK_BLOCKERS: [Bitboard; MAX_POS] = generate_slide_piece_blockers(&ROOK_DELTAS);
-pub const BISHOP_BLOCKERS: [Bitboard; MAX_POS] = generate_slide_piece_blockers(&BISHOP_DELTAS);
+pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] = generate_slide_piece_blockers(&ROOK_DELTAS);
+pub const BISHOP_BLOCKERS: [Bitboard; Position::MAX_POS] = generate_slide_piece_blockers(&BISHOP_DELTAS);
 
 pub static BISHOP_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&BISHOP_DELTAS, BISHOP_MAGICS, BISHOP_TABLE_SIZE)
@@ -24,12 +24,12 @@ pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| {
 
 fn generate_slide_piece_attack_tables(
     slider_deltas: &[(i8, i8); 4],
-    magics: &[MagicEntry; MAX_POS],
+    magics: &[MagicEntry; Position::MAX_POS],
     table_size: usize,
 ) -> Vec<Bitboard> {
     let mut table = vec![EMPTY_BIT_B; table_size];
     //table.reserve(table_size);
-    for pos in 0..MAX_POS {
+    for pos in 0..Position::MAX_POS {
         let magic_entry = &magics[pos];
         let mask = magic_entry.mask;
 
@@ -49,10 +49,10 @@ fn generate_slide_piece_attack_tables(
     table
 }
 
-const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; MAX_POS] {
-    let mut moves = [EMPTY_BIT_B; MAX_POS];
+const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Position::MAX_POS] {
+    let mut moves = [EMPTY_BIT_B; Position::MAX_POS];
     let mut square = 0;
-    while square < MAX_POS {
+    while square < Position::MAX_POS {
         let pos = Position::new(square);
         let mut delt_i = 0;
         while delt_i < 4 {
@@ -70,10 +70,10 @@ const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; MAX
     moves
 }
 
-const fn generate_king_ring_moves() -> [Bitboard; MAX_POS] {
-    let mut moves = [Bitboard(0); MAX_POS];
+const fn generate_king_ring_moves() -> [Bitboard; Position::MAX_POS] {
+    let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
-    while square < MAX_POS {
+    while square < Position::MAX_POS {
         let file = square % 8;
         let rank = square / 8;
 
@@ -101,8 +101,8 @@ const fn generate_king_ring_moves() -> [Bitboard; MAX_POS] {
     moves
 }
 
-const fn generate_knight_moves() -> [Bitboard; MAX_POS] {
-    let mut moves = [Bitboard(0); MAX_POS];
+const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
+    let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
     let deltas = [
         (2, 1),
@@ -114,7 +114,7 @@ const fn generate_knight_moves() -> [Bitboard; MAX_POS] {
         (1, -2),
         (2, -1),
     ];
-    while square < MAX_POS {
+    while square < Position::MAX_POS {
         // Knight moves: L-shape (2+1 or 1+2)
         // offsets for knight moves
         let mut i = 0;
@@ -137,7 +137,7 @@ const fn generate_knight_moves() -> [Bitboard; MAX_POS] {
 
 // pasted from find_all_magics
 #[rustfmt::skip]
-pub const BISHOP_MAGICS: &[MagicEntry; MAX_POS] = &[
+pub const BISHOP_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x0040201008040200), magic: 0x200204104C860080, shift: 58, offset: 0 },
     MagicEntry { mask: Bitboard(0x0000402010080400), magic: 0x0808220842002121, shift: 59, offset: 64 },
     MagicEntry { mask: Bitboard(0x0000004020100A00), magic: 0x8622020401E40388, shift: 59, offset: 96 },
@@ -205,7 +205,7 @@ pub const BISHOP_MAGICS: &[MagicEntry; MAX_POS] = &[
 ];
 pub const BISHOP_TABLE_SIZE: usize = 5248;
 #[rustfmt::skip]
-pub const ROOK_MAGICS: &[MagicEntry; MAX_POS] = &[
+pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x000101010101017E), magic: 0x0080001140028420, shift: 52, offset: 0 },
     MagicEntry { mask: Bitboard(0x000202020202027C), magic: 0x0040014020003006, shift: 53, offset: 4096 },
     MagicEntry { mask: Bitboard(0x000404040404047A), magic: 0x410010A001C10008, shift: 53, offset: 6144 },

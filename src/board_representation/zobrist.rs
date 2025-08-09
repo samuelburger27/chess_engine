@@ -1,4 +1,4 @@
-use crate::board_representation::{board::{Board, Turn, PLAYER_COUNT, WHITE}, r#const::MAX_POS, piece::{self, Piece, PIECE_COUNT}, position::Position};
+use crate::board_representation::{board::{Board, Turn, PLAYER_COUNT, WHITE}, piece::{Piece, PIECE_COUNT}, position::Position};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
@@ -6,7 +6,7 @@ pub type ZobristHash = u64;
 
 pub struct ZobristTable {
     // hash for every tile piece type combination
-    pub piece_square: [ZobristHash; MAX_POS * PLAYER_COUNT * PIECE_COUNT],
+    pub piece_square: [[[ZobristHash; Position::MAX_POS];PIECE_COUNT]; PLAYER_COUNT],
     pub white_to_move: ZobristHash,
     pub castle_rights: [ZobristHash; 4],
     pub en_passant_file: [ZobristHash; 8],
@@ -20,16 +20,19 @@ impl ZobristTable {
             rng = Pcg64Mcg::seed_from_u64(seed);
         }
         let mut table = ZobristTable {
-            piece_square: [0; MAX_POS * PLAYER_COUNT * PIECE_COUNT],
+            piece_square: [[[0; Position::MAX_POS];PIECE_COUNT]; PLAYER_COUNT],
+            //piece_square: [0; Position::MAX_POS * PLAYER_COUNT * PIECE_COUNT],
             white_to_move: rng.gen(),
             castle_rights: [0;4],
             en_passant_file: [0;8],
         };
-
-        for i in 0..MAX_POS * PLAYER_COUNT * PIECE_COUNT {
-            table.piece_square[i] = rng.gen();
+        for player in 0..PLAYER_COUNT {
+            for piece in 0..PIECE_COUNT {
+                for pos in 0..Position::MAX_POS {
+                    table.piece_square[player][piece][pos] = rng.gen();
+                }
+            }
         }
-
         for i in 0..4 {
             table.castle_rights[i] = rng.gen();
         }
@@ -40,15 +43,11 @@ impl ZobristTable {
         table
     }
 
-    pub fn get_piece_square_index(&self, pos: usize, color: Turn, piece: Piece) -> usize {
-        pos * PLAYER_COUNT * PIECE_COUNT + color as usize * PIECE_COUNT + piece as usize
-    }
-
     pub fn hash_position(&self, board: &Board) -> ZobristHash {
         let mut hash: ZobristHash = 0;
-        for pos in 0..MAX_POS {
+        for pos in 0..Position::MAX_POS {
             if let Some((piece, color)) = board.get_piece_at(Position::new(pos)) {
-                hash ^= self.piece_square[self.get_piece_square_index(pos, color, piece)];
+                hash ^= self.piece_square[color as usize][piece as usize][pos];
             }
         }
         if board.turn == WHITE {

@@ -26,13 +26,10 @@ pub struct Board {
     // if any pawn can be captured by en passant(just made double move)
     // position that enemy should attack at will be recorded here
     pub en_passant: Bitboard,
-
     pub halfmove_count: u8,
     pub fullmove_count: u16,
-
     pub castle_rights: CastleRights,
-    pub zobrist_key: ZobristHash,
-
+    pub(crate) zobrist_key: ZobristHash,
     pub(crate) history: Vec<StateDelta>,
 }
 
@@ -92,6 +89,43 @@ impl Board {
         self.zobrist_key = ZOBRIST_TABLE.hash_position(&self);
     }
 
+    pub(crate) fn remove_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
+        // remove piece from bitboard and zobrist key
+        let bb_index = Board::get_bb_index(piece, turn);
+        self.piece_boards[bb_index].clear_square(pos.as_usize());
+        self.xor_piece_from_zobrist(turn, piece, pos);
+    }
+
+    pub(crate) fn add_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
+        // add piece to bitboard and zobrist key
+        let bb_index = Board::get_bb_index(piece, turn);
+        self.piece_boards[bb_index].set_square(pos.as_usize());
+        self.xor_piece_from_zobrist(turn, piece, pos);
+    }
+
+    pub(crate) fn xor_piece_from_zobrist(&mut self, turn: Turn, piece: Piece, pos: Position) {
+        self.zobrist_key ^=
+            ZOBRIST_TABLE.piece_square[turn as usize][piece as usize][pos.as_usize()];
+    }
+
+    pub(crate) fn xor_en_pass_from_zobrist(&mut self, en_passant: Bitboard) {
+        if en_passant.is_not_empty() {
+            let pos = Position::new(en_passant.trailing_zeros());
+            let (file, _) = pos.get_file_and_rank();
+            self.zobrist_key ^= ZOBRIST_TABLE.en_passant_file[file];
+        }
+    }
+
+    pub(crate) fn remove_castle(&mut self, turn: Turn, king_side: bool) {
+        // remove castle rights
+        // also updates zobrist key
+        if self.castle_rights.can_castle(turn, king_side) {
+            self.zobrist_key ^=
+                ZOBRIST_TABLE.castle_rights[self.castle_rights.castle_index(turn, king_side)];
+            self.castle_rights.remove_castle_right(turn, king_side);
+        }
+    }
+
     pub(crate) fn compute_bitboards(&mut self) {
         // recompute empty tiles, and player boards
         let mut white_pieces = Bitboard::new();
@@ -123,15 +157,17 @@ impl Board {
         self.tile_under_attack(king_pos, !turn)
     }
 
-    pub(crate) fn update_game_state(&mut self) {
-        // this method should be called when creating board and when committing a move
-        // TODO, draw, stalemate
-    }
-
     pub fn would_check(&mut self, move_: Move) -> bool {
+        let old = self.clone();
         self.commit_verified_move(move_);
         let is_check = self.in_check(!self.turn);
         self.unmake_move();
+        if old != *self {
+            println!("SOMETHING DIFFERENT HERE");
+            println!("{:?}", move_);
+            old.print_board();
+            self.print_board();
+        }
         is_check
     }
 

@@ -40,13 +40,15 @@ impl CastleRights {
     }
 
     pub fn can_castle(&self, turn: Turn, king_side: bool) -> bool {
-        let index = 2 * usize::from(turn) + usize::from(!king_side);
-        self.flags & (1 << index) != 0
+        self.flags & (1 << self.castle_index(turn, king_side)) != 0
     }
 
     pub fn remove_castle_right(&mut self, turn: Turn, king_side: bool) {
-        let index = 2 * usize::from(turn) + usize::from(!king_side);
-        self.flags &= !(1 << index);
+        self.flags &= !(1 << self.castle_index(turn, king_side));
+    }
+
+    pub fn castle_index(&self, turn: Turn, king_side: bool) -> usize {
+        2 * usize::from(turn) + usize::from(!king_side)
     }
 
     pub fn castle_at_index(&self, index: usize) -> bool {

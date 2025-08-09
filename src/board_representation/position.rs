@@ -4,8 +4,23 @@ use crate::board_representation::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
 pub struct Position(usize);
 
 impl Position {
+    pub const MAX_POS: usize = 64;
+
+    pub const ALL_POS: [Position; Position::MAX_POS] = Position::generate_all_pos();
+
+    pub const fn generate_all_pos() -> [Position; Position::MAX_POS] {
+        let mut result = [Position(0); Position::MAX_POS];
+        let mut index = 0;
+        while index < Position::MAX_POS {
+            result[index] = Position(index); 
+            index+=1;
+        }
+        result
+    
+    }
+
     pub const fn new(index: usize) -> Position {
-        assert!(index < 64, "Index must be between 0 and 63");
+        assert!(index < Position::MAX_POS, "Index must be between 0 and 63");
         Self(index)
     }
 
