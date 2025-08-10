@@ -158,16 +158,9 @@ impl Board {
     }
 
     pub fn would_check(&mut self, move_: Move) -> bool {
-        let old = self.clone();
         self.commit_verified_move(move_);
         let is_check = self.in_check(!self.turn);
         self.unmake_move();
-        if old != *self {
-            println!("SOMETHING DIFFERENT HERE");
-            println!("{:?}", move_);
-            old.print_board();
-            self.print_board();
-        }
         is_check
     }
 

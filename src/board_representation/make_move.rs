@@ -1,6 +1,6 @@
 use crate::board_representation::{
     bitboard::Bitboard,
-    board::{Board, BLACK, WHITE},
+    board::{Board, Turn, BLACK, WHITE},
     computed_boards::ZOBRIST_TABLE,
     game_state::StateDelta,
     piece::Piece,
@@ -28,10 +28,6 @@ impl Board {
         };
 
         let moving_piece = self.get_piece_type_containing_position(origin);
-
-        self.remove_piece(self.turn, moving_piece, origin);
-        self.add_piece(self.turn, moving_piece, destination);
-
         // remove captured piece from bitboard and hash
         // need to handle en passant separately
         if let Some(cap_piece) = captured_piece {
@@ -41,42 +37,32 @@ impl Board {
         match move_.get_special_move() {
             SpecialMove::Promotion => {
                 let promote_to = move_.get_promotion();
-                self.remove_piece(self.turn, moving_piece, destination);
+                self.remove_piece(self.turn, moving_piece, origin);
                 self.add_piece(self.turn, promote_to, destination);
             }
 
             SpecialMove::Castle => {
-                let (dest_file, _) = destination.get_file_and_rank();
-                // queen side
-                if dest_file == 2 {
-                    if self.turn == WHITE {
-                        self.remove_piece(self.turn, Piece::Rook, W_QUEEN_ROOK_START);
-                        self.add_piece(self.turn, Piece::Rook, W_QUEEN_START);
-                    } else {
-                        self.remove_piece(self.turn, Piece::Rook, B_QUEEN_ROOK_START);
-                        self.add_piece(self.turn, Piece::Rook, B_QUEEN_START);
-                    }
-                }
-                // king side
-                else {
-                    if self.turn == WHITE {
-                        self.remove_piece(self.turn, Piece::Rook, W_KING_ROOK_START);
-                        self.add_piece(self.turn, Piece::Rook, W_KING_SIDE_BISHOP_START);
-                    } else {
-                        self.remove_piece(self.turn, Piece::Rook, B_KING_ROOK_START);
-                        self.add_piece(self.turn, Piece::Rook, B_KING_SIDE_BISHOP_START);
-                    }
-                }
+                self.remove_piece(self.turn, moving_piece, origin);
+                self.add_piece(self.turn, moving_piece, destination);
+                let (rook_origin, rook_dest) =
+                    Board::get_castle_rook_origin_dest(self.turn, destination);
+                self.remove_piece(self.turn, Piece::Rook, rook_origin);
+                self.add_piece(self.turn, Piece::Rook, rook_dest);
             }
 
             SpecialMove::EnPassant => {
+                self.remove_piece(self.turn, moving_piece, origin);
+                self.add_piece(self.turn, moving_piece, destination);
                 captured_piece = Some(Piece::Pawn);
                 let backward = if self.turn == WHITE { SOUTH } else { NORTH };
                 let captured_pawn_pos = (destination.as_usize() as i8 + backward) as usize;
                 self.remove_piece(!self.turn, Piece::Pawn, Position::new(captured_pawn_pos));
             }
 
-            SpecialMove::NormalMove => (),
+            SpecialMove::NormalMove => {
+                self.remove_piece(self.turn, moving_piece, origin);
+                self.add_piece(self.turn, moving_piece, destination);
+            }
         }
 
         self.history.push(StateDelta::new(
@@ -190,11 +176,10 @@ impl Board {
         let (origin, dest) = last_move.get_org_and_dest();
         let moving_piece = self.get_piece_type_containing_position(dest);
 
-        self.add_piece(self.turn, moving_piece, origin);
-        self.remove_piece(self.turn, moving_piece, dest);
-
         match last_move.get_special_move() {
             SpecialMove::NormalMove => {
+                self.add_piece(self.turn, moving_piece, origin);
+                self.remove_piece(self.turn, moving_piece, dest);
                 if let Some(captured_piece) = move_delta.captured_piece {
                     self.add_piece(!self.turn, captured_piece, dest);
                 }
@@ -204,11 +189,13 @@ impl Board {
                 if let Some(captured_piece) = move_delta.captured_piece {
                     self.add_piece(!self.turn, captured_piece, dest);
                 }
-                self.remove_piece(self.turn, moving_piece, origin);
+                self.remove_piece(self.turn, moving_piece, dest);
                 self.add_piece(self.turn, Piece::Pawn, origin);
             }
 
             SpecialMove::EnPassant => {
+                self.add_piece(self.turn, moving_piece, origin);
+                self.remove_piece(self.turn, moving_piece, dest);
                 let backward = if self.turn == WHITE { SOUTH } else { NORTH };
                 if let Some(pawn_pos) = dest.try_offset(backward) {
                     self.add_piece(!self.turn, Piece::Pawn, pawn_pos);
@@ -216,27 +203,11 @@ impl Board {
             }
 
             SpecialMove::Castle => {
-                let (dest_file, _) = dest.get_file_and_rank();
-                // queen side
-                if dest_file == 2 {
-                    if self.turn == WHITE {
-                        self.add_piece(self.turn, Piece::Rook, W_QUEEN_ROOK_START);
-                        self.remove_piece(self.turn, Piece::Rook, W_QUEEN_START);
-                    } else {
-                        self.add_piece(self.turn, Piece::Rook, B_QUEEN_ROOK_START);
-                        self.remove_piece(self.turn, Piece::Rook, B_QUEEN_START);
-                    }
-                }
-                // king side
-                else {
-                    if self.turn == WHITE {
-                        self.add_piece(self.turn, Piece::Rook, W_KING_ROOK_START);
-                        self.remove_piece(self.turn, Piece::Rook, W_KING_SIDE_BISHOP_START);
-                    } else {
-                        self.add_piece(self.turn, Piece::Rook, B_KING_ROOK_START);
-                        self.remove_piece(self.turn, Piece::Rook, B_KING_SIDE_BISHOP_START);
-                    }
-                }
+                self.add_piece(self.turn, moving_piece, origin);
+                self.remove_piece(self.turn, moving_piece, dest);
+                let (rook_origin, rook_dest) = Board::get_castle_rook_origin_dest(self.turn, dest);
+                self.remove_piece(self.turn, Piece::Rook, rook_dest);
+                self.add_piece(self.turn, Piece::Rook, rook_origin);
             }
         }
 
@@ -277,6 +248,24 @@ impl Board {
             return false;
         };
         return self.make_input_move(origin, dest, promote);
+    }
+
+    fn get_castle_rook_origin_dest(turn: Turn, king_des: Position) -> (Position, Position) {
+        // return dest and origin of a rook that is moved during castle
+        let (file, _) = king_des.get_file_and_rank();
+        // queen side
+        if file == 2 {
+            if turn == WHITE {
+                return (W_QUEEN_ROOK_START, W_QUEEN_START);
+            } else {
+                return (B_QUEEN_ROOK_START, B_QUEEN_START);
+            }
+        }
+        // king side
+        else if turn == WHITE {
+            return (W_KING_ROOK_START, W_KING_SIDE_BISHOP_START);
+        }
+        return (B_KING_ROOK_START, B_KING_SIDE_BISHOP_START);
     }
 
     pub(crate) fn update_game_state(&mut self) {
