@@ -1,4 +1,4 @@
-use crate::board_representation::{
+use crate::chess_engine::{
     bitboard::Bitboard,
     board::{Board, Turn, BLACK, WHITE},
     computed_boards::ZOBRIST_TABLE,
@@ -71,6 +71,7 @@ impl Board {
             self.en_passant,
             self.castle_rights,
             self.halfmove_count,
+            self.zobrist_key,
         ));
 
         let pawn_moved = moving_piece == Piece::Pawn;
@@ -124,6 +125,7 @@ impl Board {
         self.zobrist_key ^= ZOBRIST_TABLE.white_to_move;
 
         self.compute_bitboards();
+        self.update_game_result();
     }
 
     fn captured_rook_remove_castle_rights(&mut self) {
@@ -212,6 +214,7 @@ impl Board {
         }
 
         self.compute_bitboards();
+        self.update_game_result();
     }
 
     fn make_input_move(&mut self, origin: Position, dest: Position, promote: Piece) -> bool {
@@ -266,10 +269,5 @@ impl Board {
             return (W_KING_ROOK_START, W_KING_SIDE_BISHOP_START);
         }
         return (B_KING_ROOK_START, B_KING_SIDE_BISHOP_START);
-    }
-
-    pub(crate) fn update_game_state(&mut self) {
-        // this method should be called when creating board and when committing a move
-        // TODO, draw, stalemate
     }
 }

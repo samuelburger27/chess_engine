@@ -1,5 +1,6 @@
-use crate::board_representation::{
+use crate::chess_engine::{
     bitboard::Bitboard, castle_rights::CastleRights, piece::Piece, r#move::Move,
+    zobrist::ZobristHash,
 };
 
 // used for undoing moves
@@ -10,7 +11,9 @@ pub struct StateDelta {
     pub en_pass: Bitboard,
     pub castle_rights: CastleRights,
     pub halfmove: u8,
-    // TODO zobrist hash
+    // used only for checking threefold repetitions
+    // current zobrist hash is calculated from reverting the move
+    pub zobrist_hash: ZobristHash,
 }
 
 impl StateDelta {
@@ -20,6 +23,7 @@ impl StateDelta {
         en_pass: Bitboard,
         castle_rights: CastleRights,
         halfmove: u8,
+        zobrist_hash: ZobristHash,
     ) -> StateDelta {
         StateDelta {
             move_,
@@ -27,6 +31,7 @@ impl StateDelta {
             en_pass,
             castle_rights,
             halfmove,
+            zobrist_hash,
         }
     }
 }

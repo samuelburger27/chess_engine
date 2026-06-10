@@ -1,6 +1,6 @@
 use crate::{
-    board_representation::board::Board,
-    perft::{perft_divide},
+    chess_engine::{board::Board, engine::search::find_best_move},
+    perft::perft_divide,
 };
 
 pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,8 +27,12 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
                     println!("readyok");
                 }
             }
-            "position" => board = parse_position(&parts)?,
-            "go" => {parse_go(&parts, &mut board);},
+            "position" => {
+                board = parse_position(&parts)?;
+            }
+            "go" => {
+                parse_go(&parts, &mut board);
+            }
             _ => println!("Invalid command"),
         }
         input.clear();
@@ -45,25 +49,33 @@ fn parse_go(parts: &[&str], board: &mut Board) -> bool {
                 perft_divide(board, depth);
             }
         }
-        _ => println!("Only perf is currently supported"),
-    }
-    let moves = board.generate_moves(board.turn);
-    if !moves.is_empty() {
-        let move_to_print = moves[0].to_string();
-        println!("{}", move_to_print);
+        _ => {
+            //println!("Starting search with dept 5");
+            let search_res = find_best_move(board, 5);
+            println!("info depth 1 score cp 0");
+            if let Some(best_move) = search_res.best_move {
+                println!("bestmove {}", best_move.to_string());
+            }
+        }
     }
     return true;
 }
 
-fn parse_position(parts: &[&str]) -> Result<Board, String> {
+pub fn parse_position(parts: &[&str]) -> Result<Board, String> {
     let mut board = match parts[1] {
-        "fen" => Board::from_fen(parts[2]),
+        "fen" => {
+            if parts.len() < 7 {
+                Err("FEN string is too short".to_string())
+            } else {
+                Board::from_fen(&parts[2..8].join(" "))
+            }
+        }
         "startpos" => Board::new_start_pos(),
         _ => Err("Not a valid position".to_string()),
     }?;
 
-    if parts.len() > 4 && parts[3] == "moves" {
-        for str_move in parts.iter().skip(4) {
+    if parts.len() > 8 && parts[8] == "moves" {
+        for str_move in parts.iter().skip(9) {
             if !board.play_string_move(&str_move) {
                 return Err(format!("Couldn't play move: {}", str_move));
             }

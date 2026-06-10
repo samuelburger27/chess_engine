@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use super::position::Position;
-use crate::board_representation::{
+use crate::chess_engine::{
     board::{Turn, WHITE},
     piece::Piece,
     r#const::{

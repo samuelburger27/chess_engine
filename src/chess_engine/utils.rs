@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::board_representation::computed_boards::{BISHOP_ATTACKS, ROOK_ATTACKS, ZOBRIST_TABLE};
+use crate::chess_engine::computed_boards::{BISHOP_ATTACKS, ROOK_ATTACKS, ZOBRIST_TABLE};
 
 
 pub fn init_tables() {

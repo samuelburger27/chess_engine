@@ -1,4 +1,4 @@
-use crate::board_representation::{bitboard::Bitboard, position::Position};
+use crate::chess_engine::{bitboard::Bitboard, position::Position};
 
 pub const EMPTY_BIT_B: Bitboard = Bitboard::new();
 

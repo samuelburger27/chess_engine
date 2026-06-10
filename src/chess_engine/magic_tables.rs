@@ -1,5 +1,5 @@
 use super::bitboard::Bitboard;
-use crate::board_representation::{
+use crate::chess_engine::{
     computed_boards::{BISHOP_BLOCKERS, ROOK_BLOCKERS},
     move_generation::get_sliding_moves,
     position::Position,
