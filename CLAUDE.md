@@ -11,7 +11,7 @@ cargo test run_perft_tests         # run the single perft test suite
 cargo run                          # start the engine (expects UCI input)
 ```
 
-The engine speaks UCI. Send `uci` on stdin to enter UCI mode; `go` triggers a fixed-depth-5 negamax search.
+The engine speaks UCI on stdin/stdout. Supported commands: `uci`, `isready`, `ucinewgame`, `position startpos|fen ... [moves ...]`, `go` (with `depth`, `movetime`, `wtime/btime/winc/binc`, `infinite`, or `perft N`), `stop`, `d` (print board), `quit`. Search runs on a background thread so `stop` works mid-search; bare `go` defaults to a 3-second budget.
 
 ## Architecture
 
@@ -51,13 +51,13 @@ The crate is a UCI chess engine written in Rust. The public surface in `src/lib.
 
 ### Make/Unmake (`make_move.rs`)
 
-`commit_verified_move` handles all four `SpecialMove` variants and maintains the Zobrist key incrementally. `unmake_move` pops `history` and reverses the move; Zobrist is restored by replaying the same XOR operations.
+`commit_verified_move` pushes a `StateDelta` (carrying the full pre-move Zobrist hash, used for repetition detection) before mutating anything, then handles all four `SpecialMove` variants while maintaining the Zobrist key incrementally. `unmake_move` pops `history`, reverses the move, and restores the Zobrist key wholesale from the delta. Unit tests at the bottom of the file assert the incremental hash always matches a full recompute.
 
 ### Engine (`src/chess_engine/engine/`)
 
-`search.rs` — negamax with alpha-beta pruning (fail-hard). `find_best_move` is called at depth 5 from the UCI handler.
+`search.rs` — iterative deepening over fail-soft negamax with alpha-beta pruning, quiescence search (captures/promotions only), MVV-LVA move ordering, and draw detection (fifty-move, twofold repetition via the history hashes, insufficient material). Mate scores are encoded as `MATE_SCORE - ply`. `search_position` polls an `AtomicBool` stop flag and an optional deadline every 2048 nodes and prints UCI `info` lines per completed depth; the UCI layer owns time allocation (`clock/25 + inc/2`, capped at half the clock).
 
-`evaluation.rs` — tapered material + piece-square-table evaluation. Game phase is computed from the remaining piece count; king PST is interpolated between middlegame and endgame tables.
+`evaluation.rs` — tapered material + piece-square-table evaluation. Game phase is computed from the remaining piece count; king PST is interpolated between middlegame and endgame tables. PSTs are written rank-8-first, so white squares are flipped (`sq ^ 56`) via `pst_index` and black squares index directly.
 
 ### Testing
 
