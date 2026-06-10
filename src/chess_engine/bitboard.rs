@@ -4,7 +4,8 @@ use std::ops::{
     ShrAssign,
 };
 
-use crate::board_representation::position::Position;
+use super::engine::search::find_best_move;
+use crate::chess_engine::position::Position;
 
 // 64 bits representing the squares on the chessboard
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]

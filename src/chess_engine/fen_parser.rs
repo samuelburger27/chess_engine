@@ -1,8 +1,8 @@
 use super::r#const::EMPTY_BIT_B;
-use crate::board_representation::board::{Board, Turn, BLACK, PLAYER_COUNT, WHITE};
-use crate::board_representation::castle_rights::CastleRights;
-use crate::board_representation::piece::{Piece, PIECE_COUNT};
-use crate::board_representation::position::Position;
+use crate::chess_engine::board::{Board, Turn, BLACK, PLAYER_COUNT, WHITE};
+use crate::chess_engine::castle_rights::CastleRights;
+use crate::chess_engine::piece::{Piece, PIECE_COUNT};
+use crate::chess_engine::position::Position;
 
 pub const START_POS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 

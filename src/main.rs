@@ -1,6 +1,6 @@
-use chess_engine::{board_representation::board::Board, perft::perft_divide};
+use chess_engine::{chess_engine::board::Board, perft::perft_divide};
 pub use chess_engine::{
-    board_representation::{board, magic_tables::find_magics, utils::init_tables},
+    chess_engine::{board, magic_tables::find_magics, utils::init_tables},
     uci::uci_protocol,
 };
 

@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::board_representation::{
+use crate::chess_engine::{
     r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS}, magic_tables::MagicEntry, move_generation::get_sliding_moves, position::Position, zobrist::ZobristTable
 };
 

@@ -1,5 +1,5 @@
 pub use chess_engine::{
-    board_representation::{board::Board, position::Position},
+    chess_engine::{board::Board, position::Position},
     perft::perft,
 };
 

@@ -1,3 +1,5 @@
+use std::collections::binary_heap;
+
 use super::bitboard::Bitboard;
 use super::castle_rights::CastleRights;
 use super::game_state::StateDelta;
@@ -5,10 +7,10 @@ use super::move_generation::generate_pseudo_non_castle_moves;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
 use super::r#move::Move;
-use crate::board_representation::{
+use crate::chess_engine::{
     computed_boards::ZOBRIST_TABLE,
     fen_parser::START_POS_FEN,
-    piece::{Piece, PIECE_COUNT},
+    piece::{self, Piece, PIECE_COUNT},
     zobrist::ZobristHash,
 };
 
@@ -16,6 +18,14 @@ pub type Turn = bool;
 pub const PLAYER_COUNT: usize = 2;
 pub const WHITE: Turn = false;
 pub const BLACK: Turn = true;
+
+#[derive(Clone, PartialEq)]
+pub enum GameState {
+    Playing,
+    Check,
+    Draw,
+    CheckMate,
+}
 
 #[derive(Clone, PartialEq)]
 pub struct Board {
@@ -31,6 +41,7 @@ pub struct Board {
     pub castle_rights: CastleRights,
     pub(crate) zobrist_key: ZobristHash,
     pub(crate) history: Vec<StateDelta>,
+    pub(crate) game_state: GameState,
 }
 
 impl Board {
@@ -59,6 +70,7 @@ impl Board {
             castle_rights: CastleRights::make_default(),
             zobrist_key: 0,
             history: Vec::new(),
+            game_state: GameState::Playing,
         }
     }
 
@@ -87,6 +99,42 @@ impl Board {
 
     fn compute_initial_zobrist(&mut self) {
         self.zobrist_key = ZOBRIST_TABLE.hash_position(&self);
+    }
+
+    fn is_insufficient_material(&self) -> bool {
+        // king vs king
+        // King vs. King
+        // King + Bishop vs. King
+        // King + Knight vs. King
+        // King + Bishop vs. King + Bishop
+            // If both bishops are on the same color squares.
+        
+        true
+
+    }
+
+    fn get_count_of_current_position_reached(&self) -> usize {
+        self.history.iter().filter(|s| s.zobrist_hash == self.zobrist_key).count()
+    }
+
+    pub(crate) fn update_game_result(&mut self) {
+        // this method should be called when creating board and when committing a move
+        // TODO finish
+        // TODO maybe think about
+        // let moves = self.generate_moves(self.turn);
+        // if self.in_check(self.turn) {
+        //     if moves.is_empty() {
+        //         self.game_state = GameState::CheckMate;
+        //     } else {
+        //         self.game_state = GameState::Check;
+        //     }
+        // } else if self.halfmove_count >= 50 || moves.is_empty() || self.is_insufficient_material() || 
+        // self.get_count_of_current_position_reached() >= 3 {
+        //     self.game_state = GameState::Draw
+        // }
+        // // TODO check for dead position
+        // // add check for positions
+        // self.game_state = GameState::Playing
     }
 
     pub(crate) fn remove_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
@@ -144,6 +192,10 @@ impl Board {
 
     pub(crate) fn get_bb_index(piece: Piece, turn: Turn) -> usize {
         piece as usize + (turn as usize * PIECE_COUNT)
+    }
+
+    pub(crate) fn get_piece_information_index(index: usize) -> (Piece, Turn) {
+        (Piece::from(index % PIECE_COUNT), index > PIECE_COUNT)
     }
 
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {

@@ -1,4 +1,4 @@
-use crate::board_representation::board::Board;
+use crate::chess_engine::board::Board;
 
 pub fn perft(board: &mut Board, depth: u32) -> u64 {
     if depth == 0 {

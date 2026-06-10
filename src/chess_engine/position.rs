@@ -1,4 +1,4 @@
-use crate::board_representation::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
+use crate::chess_engine::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Position(usize);
