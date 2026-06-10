@@ -1,5 +1,3 @@
-use std::collections::binary_heap;
-
 use super::bitboard::Bitboard;
 use super::castle_rights::CastleRights;
 use super::game_state::StateDelta;
@@ -10,7 +8,7 @@ use super::r#move::Move;
 use crate::chess_engine::{
     computed_boards::ZOBRIST_TABLE,
     fen_parser::START_POS_FEN,
-    piece::{self, Piece, PIECE_COUNT},
+    piece::{Piece, PIECE_COUNT},
     zobrist::ZobristHash,
 };
 
@@ -101,20 +99,46 @@ impl Board {
         self.zobrist_key = ZOBRIST_TABLE.hash_position(&self);
     }
 
-    fn is_insufficient_material(&self) -> bool {
-        // king vs king
-        // King vs. King
-        // King + Bishop vs. King
-        // King + Knight vs. King
-        // King + Bishop vs. King + Bishop
-            // If both bishops are on the same color squares.
-        
-        true
+    /// Neither side can possibly deliver mate:
+    /// K vs K, K+B vs K, K+N vs K, or K+B vs K+B with both bishops on the
+    /// same square colour.
+    pub fn is_insufficient_material(&self) -> bool {
+        let pawns = self.get_piece_bitboard(Piece::Pawn, WHITE)
+            | self.get_piece_bitboard(Piece::Pawn, BLACK);
+        let majors = self.get_piece_bitboard(Piece::Rook, WHITE)
+            | self.get_piece_bitboard(Piece::Rook, BLACK)
+            | self.get_piece_bitboard(Piece::Queen, WHITE)
+            | self.get_piece_bitboard(Piece::Queen, BLACK);
+        if (pawns | majors).is_not_empty() {
+            return false;
+        }
 
+        let knights = self.get_piece_bitboard(Piece::Knight, WHITE)
+            | self.get_piece_bitboard(Piece::Knight, BLACK);
+        let bishops = self.get_piece_bitboard(Piece::Bishop, WHITE)
+            | self.get_piece_bitboard(Piece::Bishop, BLACK);
+        let minor_count = knights.count_bits() + bishops.count_bits();
+
+        match minor_count {
+            0 | 1 => true,
+            2 => {
+                // only K+B vs K+B with same-coloured bishops is a dead draw
+                let dark_squares = Bitboard::from_u64(0xAA55_AA55_AA55_AA55);
+                self.get_piece_bitboard(Piece::Bishop, WHITE).count_bits() == 1
+                    && self.get_piece_bitboard(Piece::Bishop, BLACK).count_bits() == 1
+                    && ((bishops & dark_squares) == bishops || (bishops & dark_squares).is_empty())
+            }
+            _ => false,
+        }
     }
 
-    fn get_count_of_current_position_reached(&self) -> usize {
-        self.history.iter().filter(|s| s.zobrist_hash == self.zobrist_key).count()
+    /// Number of times the current position already occurred earlier in the
+    /// game/search path (history stores the pre-move hash of every position).
+    pub(crate) fn get_count_of_current_position_reached(&self) -> usize {
+        self.history
+            .iter()
+            .filter(|s| s.zobrist_hash == self.zobrist_key)
+            .count()
     }
 
     pub(crate) fn update_game_result(&mut self) {
@@ -195,7 +219,7 @@ impl Board {
     }
 
     pub(crate) fn get_piece_information_index(index: usize) -> (Piece, Turn) {
-        (Piece::from(index % PIECE_COUNT), index > PIECE_COUNT)
+        (Piece::from(index % PIECE_COUNT), index >= PIECE_COUNT)
     }
 
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {

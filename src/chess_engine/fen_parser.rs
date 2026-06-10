@@ -52,6 +52,7 @@ impl Board {
                 'Q' => castle_rights[1] = true,
                 'k' => castle_rights[2] = true,
                 'q' => castle_rights[3] = true,
+                '-' => (),
                 _ => return Err(format!("Invalid castle character: {}", ch)),
             }
         }

@@ -1,24 +1,8 @@
-use chess_engine::{chess_engine::board::Board, perft::perft_divide};
-pub use chess_engine::{
-    chess_engine::{board, magic_tables::find_magics, utils::init_tables},
-    uci::uci_protocol,
-};
-
-use std::io;
+use chess_engine::{chess_engine::utils::init_tables, uci::uci_protocol};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tables();
-    // let seed = 1234u64;
-    // find_magics(Some(seed));
-    let mut buffer = String::new();
-    io::stdin()
-        .read_line(&mut buffer)
-        .expect("Failed to read input");
-
-    if buffer.trim() == "uci" {
-        uci_protocol()?;
-        return Ok(());
-    }
-    println!("Currently only UCI protocol is supported, stopping");
-    Ok(())
+    // the command loop replies to `uci` with the id/uciok handshake and
+    // handles everything else (position, go, stop, quit, ...)
+    uci_protocol()
 }

@@ -17,21 +17,37 @@ impl Board {
         // commit move
         // move should be verified before
 
-        // xor old en_pass file
-        self.xor_en_pass_from_zobrist(self.en_passant);
-
         let (origin, destination) = move_.get_org_and_dest();
-        let mut captured_piece = if !self.empty_tiles.is_square_set(destination.into()) {
+        let captured_piece = if move_.get_special_move() == SpecialMove::EnPassant {
+            Some(Piece::Pawn)
+        } else if !self.empty_tiles.is_square_set(destination.into()) {
             Some(self.get_piece_type_containing_position(destination))
         } else {
             None
         };
 
         let moving_piece = self.get_piece_type_containing_position(origin);
+
+        // record state before any mutation; the stored zobrist must be the
+        // full pre-move hash so repetition detection can compare against it
+        self.history.push(StateDelta::new(
+            move_,
+            captured_piece,
+            self.en_passant,
+            self.castle_rights,
+            self.halfmove_count,
+            self.zobrist_key,
+        ));
+
+        // xor old en_pass file
+        self.xor_en_pass_from_zobrist(self.en_passant);
+
         // remove captured piece from bitboard and hash
-        // need to handle en passant separately
-        if let Some(cap_piece) = captured_piece {
-            self.remove_piece(!self.turn, cap_piece, destination);
+        // en passant captures are handled in the match below
+        if move_.get_special_move() != SpecialMove::EnPassant {
+            if let Some(cap_piece) = captured_piece {
+                self.remove_piece(!self.turn, cap_piece, destination);
+            }
         }
 
         match move_.get_special_move() {
@@ -53,7 +69,6 @@ impl Board {
             SpecialMove::EnPassant => {
                 self.remove_piece(self.turn, moving_piece, origin);
                 self.add_piece(self.turn, moving_piece, destination);
-                captured_piece = Some(Piece::Pawn);
                 let backward = if self.turn == WHITE { SOUTH } else { NORTH };
                 let captured_pawn_pos = (destination.as_usize() as i8 + backward) as usize;
                 self.remove_piece(!self.turn, Piece::Pawn, Position::new(captured_pawn_pos));
@@ -64,15 +79,6 @@ impl Board {
                 self.add_piece(self.turn, moving_piece, destination);
             }
         }
-
-        self.history.push(StateDelta::new(
-            move_,
-            captured_piece,
-            self.en_passant,
-            self.castle_rights,
-            self.halfmove_count,
-            self.zobrist_key,
-        ));
 
         let pawn_moved = moving_piece == Piece::Pawn;
 
@@ -115,11 +121,13 @@ impl Board {
             self.captured_rook_remove_castle_rights();
         }
 
-        self.fullmove_count += 1;
-        if let None = captured_piece {
-            if !pawn_moved {
-                self.halfmove_count += 1;
-            }
+        if self.turn == BLACK {
+            self.fullmove_count += 1;
+        }
+        if captured_piece.is_none() && !pawn_moved {
+            self.halfmove_count += 1;
+        } else {
+            self.halfmove_count = 0;
         }
         self.turn = !self.turn;
         self.zobrist_key ^= ZOBRIST_TABLE.white_to_move;
@@ -154,25 +162,14 @@ impl Board {
             return;
         };
 
-        if self.castle_rights != move_delta.castle_rights {
-            // update castle rights in zobrist key
-            for index in 0..4 {
-                if self.castle_rights.castle_at_index(index)
-                    != move_delta.castle_rights.castle_at_index(index)
-                {
-                    self.zobrist_key ^= ZOBRIST_TABLE.castle_rights[index];
-                }
-            }
-        }
-        self.xor_en_pass_from_zobrist(self.en_passant);
-        self.xor_en_pass_from_zobrist(move_delta.en_pass);
-        self.zobrist_key ^= ZOBRIST_TABLE.white_to_move;
-
         self.en_passant = move_delta.en_pass;
         self.castle_rights = move_delta.castle_rights;
         self.halfmove_count = move_delta.halfmove;
-        self.fullmove_count -= 1;
         self.turn = !self.turn;
+        // fullmove counter only advances after black's move
+        if self.turn == BLACK {
+            self.fullmove_count -= 1;
+        }
 
         let last_move = move_delta.move_;
         let (origin, dest) = last_move.get_org_and_dest();
@@ -212,6 +209,10 @@ impl Board {
                 self.add_piece(self.turn, Piece::Rook, rook_origin);
             }
         }
+
+        // add_piece/remove_piece above xor the hash; the stored pre-move hash
+        // is exact, so restore it wholesale instead of replaying xors
+        self.zobrist_key = move_delta.zobrist_hash;
 
         self.compute_bitboards();
         self.update_game_result();
@@ -269,5 +270,91 @@ impl Board {
             return (W_KING_ROOK_START, W_KING_SIDE_BISHOP_START);
         }
         return (B_KING_ROOK_START, B_KING_SIDE_BISHOP_START);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chess_engine::board::Board;
+    use crate::chess_engine::computed_boards::ZOBRIST_TABLE;
+
+    fn assert_incremental_hash_matches(board: &Board) {
+        assert_eq!(
+            board.zobrist_key,
+            ZOBRIST_TABLE.hash_position(board),
+            "incremental zobrist key diverged from a full recompute"
+        );
+    }
+
+    fn play_and_check(board: &mut Board, moves: &[&str]) {
+        for mv in moves {
+            assert!(board.play_string_move(mv), "illegal move in test: {}", mv);
+            assert_incremental_hash_matches(board);
+        }
+    }
+
+    #[test]
+    fn zobrist_stays_consistent_through_special_moves() {
+        let mut board = Board::new_start_pos().unwrap();
+        assert_incremental_hash_matches(&board);
+        // double pawn pushes (en passant squares), en passant capture,
+        // development, castling both sides
+        play_and_check(
+            &mut board,
+            &[
+                "e2e4", "a7a6", "e4e5", "d7d5", "e5d6", // en passant capture
+                "e7d6", "g1f3", "g8f6", "f1e2", "f8e7", "e1g1", // white castles short
+                "e8g8", // black castles short
+            ],
+        );
+    }
+
+    #[test]
+    fn zobrist_stays_consistent_through_promotion() {
+        // white pawn on g7 promotes by pushing; black pawn on b2 promotes by
+        // capturing the rook on a1
+        let mut board = Board::from_fen("8/6P1/7k/8/8/8/1p6/R6K w - - 0 1").unwrap();
+        assert_incremental_hash_matches(&board);
+        play_and_check(&mut board, &["g7g8q", "b2a1n"]);
+    }
+
+    #[test]
+    fn unmake_restores_board_and_hash() {
+        let mut board = Board::new_start_pos().unwrap();
+        let original = board.clone();
+        play_and_check(
+            &mut board,
+            &["e2e4", "a7a6", "e4e5", "d7d5", "e5d6", "e7d6", "g1f3"],
+        );
+        for _ in 0..7 {
+            board.unmake_move();
+            assert_incremental_hash_matches(&board);
+        }
+        assert!(board == original, "unmake did not restore the original board");
+    }
+
+    #[test]
+    fn halfmove_and_fullmove_counters() {
+        let mut board = Board::new_start_pos().unwrap();
+        board.play_string_move("g1f3"); // quiet knight move: halfmove 1
+        assert_eq!(board.halfmove_count, 1);
+        assert_eq!(board.fullmove_count, 1);
+        board.play_string_move("g8f6");
+        assert_eq!(board.halfmove_count, 2);
+        assert_eq!(board.fullmove_count, 2); // black moved: fullmove advances
+        board.play_string_move("e2e4"); // pawn move resets the clock
+        assert_eq!(board.halfmove_count, 0);
+        assert_eq!(board.fullmove_count, 2);
+    }
+
+    #[test]
+    fn repetition_is_detected() {
+        let mut board = Board::new_start_pos().unwrap();
+        // shuffle knights back and forth: position repeats
+        for mv in ["g1f3", "g8f6", "f3g1", "f6g8"] {
+            assert!(board.play_string_move(mv));
+        }
+        // back to the start position, which occurred once before
+        assert_eq!(board.get_count_of_current_position_reached(), 1);
     }
 }
