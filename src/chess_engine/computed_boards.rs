@@ -168,6 +168,7 @@ const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
 /// Per-square magic parameters for bishops (see [`MagicEntry`]), generated
 /// offline and pasted in.
 #[rustfmt::skip]
+#[allow(clippy::unreadable_literal)]
 pub const BISHOP_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x0040201008040200), magic: 0x200204104C860080, shift: 58, offset: 0 },
     MagicEntry { mask: Bitboard(0x0000402010080400), magic: 0x0808220842002121, shift: 59, offset: 64 },
@@ -239,6 +240,7 @@ pub const BISHOP_TABLE_SIZE: usize = 5248;
 /// Per-square magic parameters for rooks (see [`MagicEntry`]), generated offline
 /// and pasted in.
 #[rustfmt::skip]
+#[allow(clippy::unreadable_literal)]
 pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x000101010101017E), magic: 0x0080001140028420, shift: 52, offset: 0 },
     MagicEntry { mask: Bitboard(0x000202020202027C), magic: 0x0040014020003006, shift: 53, offset: 4096 },
