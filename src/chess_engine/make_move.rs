@@ -35,6 +35,7 @@ impl Board {
     ///
     /// The move must already be known to be legal (e.g. produced by
     /// [`generate_moves`](Board::generate_moves)); it is not re-validated here.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn commit_verified_move(&mut self, move_: Move) {
         // commit move
         // move should be verified before

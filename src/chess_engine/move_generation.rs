@@ -25,7 +25,10 @@ use crate::chess_engine::r#const::{
 use super::bitboard::Bitboard;
 use super::board::{Board, Turn, WHITE};
 use super::computed_boards::{KING_RING_MOVES, KNIGHT_MOVES};
-use super::masks::{RANK_2, RANK_7, RANK_8, RANK_1, NOT_H_FILE, NOT_A_FILE, W_QUEEN_CASTLE_EMPTY, B_QUEEN_CASTLE_EMPTY, W_KING_CASTLE_EMPTY, B_KING_CASTLE_EMPTY};
+use super::masks::{
+    B_KING_CASTLE_EMPTY, B_QUEEN_CASTLE_EMPTY, NOT_A_FILE, NOT_H_FILE, RANK_1, RANK_2, RANK_7,
+    RANK_8, W_KING_CASTLE_EMPTY, W_QUEEN_CASTLE_EMPTY,
+};
 use super::piece::Piece;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
@@ -80,11 +83,8 @@ pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> 
 ///
 /// This is the slow, blocker-aware reference used when *building* the magic
 /// attack tables; runtime move generation reads those tables directly.
-pub fn get_sliding_moves(
-    deltas: &[(i8, i8); 4],
-    pos: Position,
-    blockers: Bitboard,
-) -> Bitboard {
+#[allow(clippy::trivially_copy_pass_by_ref)]
+pub fn get_sliding_moves(deltas: &[(i8, i8); 4], pos: Position, blockers: Bitboard) -> Bitboard {
     let mut moves = EMPTY_BIT_B;
     for &(df, dr) in deltas {
         let mut ray = pos;
@@ -116,6 +116,7 @@ fn extract_moves(mut bit_board: Bitboard, origin: usize, moves: &mut Vec<Move>) 
 
 /// Pushes one pawn [`Move`] per set destination square in `bit_board`,
 /// recovering each origin by subtracting `shift` from the destination index.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn extract_pawn_moves(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>) {
     // Extract moves from bitboard representation
     // and push them to the moves vector
@@ -134,6 +135,7 @@ fn extract_pawn_moves(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>)
 
 /// Like [`extract_pawn_moves`], but emits all four promotion moves per
 /// destination square (used for pawns reaching the last rank).
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn extract_promotions(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>) {
     while bit_board.is_not_empty() {
         let dest = bit_board.trailing_zeros();
@@ -149,6 +151,7 @@ fn extract_promotions(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>)
 /// Generates all pawn moves for `turn`: single and double pushes, diagonal
 /// captures, en-passant captures, and promotions, computed with file-masked
 /// bit shifts.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn pawn_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let direction = if turn == WHITE { NORTH } else { SOUTH };
     let start_rank = if turn == WHITE { RANK_2 } else { RANK_7 };

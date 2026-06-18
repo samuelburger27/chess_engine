@@ -125,7 +125,7 @@ const KING_PST_EG: [i32; 64] = [
 /// White's perspective; black squares index it directly.
 const fn pst_index(square: usize, is_white: bool) -> usize {
     if is_white {
-        square ^ 56
+        square ^ 0x38
     } else {
         square
     }
@@ -139,6 +139,7 @@ const fn pst_index(square: usize, is_white: bool) -> usize {
 /// [`KING_PST_EG`]). The result is negated for Black so it is always reported
 /// from the mover's point of view. The starting position is symmetric, so it
 /// evaluates to `0`.
+#[allow(clippy::similar_names)]
 pub(crate) fn evaluate(board: &Board) -> i32 {
     // --- Calculate final tapered score for KINGS ---
 

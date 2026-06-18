@@ -49,7 +49,7 @@ pub struct SearchLimits {
 impl SearchLimits {
     /// Limits the search to a fixed depth (clamped to [`MAX_DEPTH`]) with no
     /// time limit.
-    #[must_use] 
+    #[must_use]
     pub fn depth(depth: u8) -> Self {
         Self {
             depth: depth.min(MAX_DEPTH),
@@ -59,7 +59,7 @@ impl SearchLimits {
 
     /// An unbounded search (to [`MAX_DEPTH`], no deadline); stopped only via the
     /// stop flag.
-    #[must_use] 
+    #[must_use]
     pub const fn infinite() -> Self {
         Self {
             depth: MAX_DEPTH,
@@ -129,7 +129,7 @@ impl SearchContext<'_> {
 /// assert_eq!(result.best_move.unwrap().to_string(), "a1a8");
 /// assert!(result.score >= MATE_THRESHOLD); // a forced mate was found
 /// ```
-#[must_use] 
+#[must_use]
 pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
     let stop = AtomicBool::new(false);
     search_position(&mut board.clone(), SearchLimits::depth(depth), &stop, false)
@@ -207,7 +207,11 @@ fn print_info(result: &SearchResult, start: Instant) {
         format!("cp {}", result.score)
     };
 
-    let pv: Vec<String> = result.pv.iter().map(std::string::ToString::to_string).collect();
+    let pv: Vec<String> = result
+        .pv
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     println!(
         "info depth {} score {} nodes {} time {} nps {} pv {}",
         result.depth,
@@ -306,7 +310,7 @@ fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchCont
     let mut moves: Vec<Move> = board
         .generate_moves(board.turn)
         .into_iter()
-        .filter(|m| is_tactical(board, m))
+        .filter(|&m| is_tactical(board, m))
         .collect();
     order_moves(board, &mut moves);
 
@@ -332,7 +336,7 @@ fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchCont
 
 /// Returns `true` if `mv` is a capture, promotion, or en passant — the moves
 /// the quiescence search extends through.
-fn is_tactical(board: &Board, mv: &Move) -> bool {
+fn is_tactical(board: &Board, mv: Move) -> bool {
     match mv.get_special_move() {
         SpecialMove::Promotion | SpecialMove::EnPassant => true,
         SpecialMove::Castle => false,
@@ -360,7 +364,7 @@ const fn piece_value(piece: Piece) -> i32 {
 fn order_moves(board: &Board, moves: &mut [Move]) {
     let mut scored: Vec<(i32, Move)> = moves
         .iter()
-        .map(|&mv| (move_order_score(board, &mv), mv))
+        .map(|&mv| (move_order_score(board, mv), mv))
         .collect();
     scored.sort_by_key(|(score, _)| -*score);
     for (slot, (_, mv)) in moves.iter_mut().zip(scored) {
@@ -371,7 +375,7 @@ fn order_moves(board: &Board, moves: &mut [Move]) {
 /// Heuristic ordering score for a single move: promotions highest, then
 /// captures by MVV-LVA (victim value weighted above attacker value), then quiet
 /// moves at `0`.
-fn move_order_score(board: &Board, mv: &Move) -> i32 {
+fn move_order_score(board: &Board, mv: Move) -> i32 {
     let mut score = 0;
     match mv.get_special_move() {
         SpecialMove::Promotion => {

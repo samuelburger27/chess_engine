@@ -40,8 +40,10 @@ impl ZobristTable {
     /// table (used so every board in the program shares one fixed function);
     /// `None` seeds from the OS RNG.
     pub fn new(seed: Option<u64>) -> Self {
-        let mut rng =
-            seed.map_or_else(|| Pcg64Mcg::from_rng(&mut rand::rng()), Pcg64Mcg::seed_from_u64);
+        let mut rng = seed.map_or_else(
+            || Pcg64Mcg::from_rng(&mut rand::rng()),
+            Pcg64Mcg::seed_from_u64,
+        );
         let mut table = Self {
             piece_square: [[[0; Position::MAX_POS]; PIECE_COUNT]; PLAYER_COUNT],
             //piece_square: [0; Position::MAX_POS * PLAYER_COUNT * PIECE_COUNT],

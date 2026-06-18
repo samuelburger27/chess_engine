@@ -82,33 +82,33 @@ const DEFAULT_MOVE: u16 = PROMOTE_TO_QUEEN | NORMAL_MOVE;
 
 impl Move {
     /// Wraps a raw 16-bit encoding without validation.
-    #[must_use] 
+    #[must_use]
     pub const fn make_raw(data: u16) -> Self {
         Self(data)
     }
 
     /// Returns the raw 16-bit encoding.
-    #[must_use] 
+    #[must_use]
     pub const fn get_raw(&self) -> u16 {
         self.0
     }
 
     /// Returns the destination square (bits 0–5).
-    #[must_use] 
+    #[must_use]
     pub const fn get_dest(&self) -> Position {
-        let mask = 0b0000000000111111u16;
+        let mask = 0b0000_0000_0011_1111_u16;
         Position::new((mask & self.0) as usize)
     }
 
     /// Returns the origin square (bits 6–11).
-    #[must_use] 
+    #[must_use]
     pub const fn get_origin(&self) -> Position {
         let mask = 0b0000_1111_1100_0000u16;
         Position::new(((mask & self.0) >> 6) as usize)
     }
 
     /// Returns the `(origin, destination)` pair.
-    #[must_use] 
+    #[must_use]
     pub const fn get_org_and_dest(&self) -> (Position, Position) {
         (self.get_origin(), self.get_dest())
     }
@@ -121,9 +121,9 @@ impl Move {
     /// let m = Move::new_default(Position::new(12), Position::new(28));
     /// assert_eq!(m.get_special_move(), SpecialMove::NormalMove);
     /// ```
-    #[must_use] 
+    #[must_use]
     pub const fn get_special_move(&self) -> SpecialMove {
-        let mask = 0b1100000000000000u16;
+        let mask = 0b1100_0000_0000_0000_u16;
         match self.0 & mask {
             PROMOTION => SpecialMove::Promotion,
             EN_PASSANT => SpecialMove::EnPassant,
@@ -135,9 +135,9 @@ impl Move {
     /// Decodes the promotion piece (bits 12–13). Only meaningful when
     /// [`get_special_move`](Self::get_special_move) is [`SpecialMove::Promotion`];
     /// otherwise returns [`Piece::Queen`] (the default bit pattern).
-    #[must_use] 
+    #[must_use]
     pub const fn get_promotion(&self) -> Piece {
-        let mask: u16 = 0b0011000000000000u16;
+        let mask: u16 = 0b0011_0000_0000_0000_u16;
         match self.0 & mask {
             PROMOTE_TO_KNIGHT => Piece::Knight,
             PROMOTE_TO_BISHOP => Piece::Bishop,
@@ -146,14 +146,15 @@ impl Move {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn create_move_mask(origin: Position, destination: Position) -> u16 {
         let origin_square = usize::from(origin) as u16;
         let dest_square = usize::from(destination) as u16;
-        dest_square | ((origin_square & 0b00111111) << 6)
+        dest_square | ((origin_square & 0b0011_1111) << 6)
     }
 
     /// Builds an ordinary move (no special flag) from `origin` to `destination`.
-    #[must_use] 
+    #[must_use]
     pub fn new_default(origin: Position, destination: Position) -> Self {
         let mask = Self::create_move_mask(origin, destination);
         Self(mask | DEFAULT_MOVE)
@@ -170,7 +171,7 @@ impl Move {
     /// let strings: Vec<String> = promos.iter().map(|m| m.to_string()).collect();
     /// assert_eq!(strings, ["e7e8n", "e7e8b", "e7e8r", "e7e8q"]);
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn new_promote(origin: Position, destination: Position) -> [Self; 4] {
         let mask: u16 = Self::create_move_mask(origin, destination) | PROMOTION;
         [
@@ -184,7 +185,7 @@ impl Move {
     /// Builds a move from `origin` to `destination` carrying the given `special`
     /// flag (one of [`NORMAL_MOVE`], [`EN_PASSANT`], [`CASTLING`], [`PROMOTION`],
     /// optionally OR-ed with a promotion-piece value).
-    #[must_use] 
+    #[must_use]
     pub fn new_special(origin: Position, destination: Position, special: u16) -> Self {
         let mask = Self::create_move_mask(origin, destination) | special;
         Self(mask)
@@ -192,7 +193,7 @@ impl Move {
 
     /// Builds the castling move for `turn` on the given side, encoded as the
     /// king's two-square step (e.g. white king-side is `e1`→`g1`).
-    #[must_use] 
+    #[must_use]
     pub fn new_castle(king_side: bool, turn: Turn) -> Self {
         if turn == WHITE {
             if king_side {

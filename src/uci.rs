@@ -81,7 +81,6 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
         match parts[0] {
             "uci" => print_identity(),
             "isready" => println!("readyok"),
-            "setoption" => (), // no options supported yet
             "ucinewgame" => {
                 state.stop_search();
                 state.board = Board::new_start_pos()?;
@@ -144,6 +143,7 @@ fn handle_go(parts: &[&str], state: &mut EngineState) {
 /// Turns the tokens of a `go` command into [`SearchLimits`], applying the time
 /// allocation described in the [module docs](self). A bare `go` (no depth and no
 /// clocks) falls back to a three-second budget so the engine stays responsive.
+#[allow(clippy::cast_possible_truncation)]
 fn parse_go_limits(parts: &[&str], board: &Board) -> SearchLimits {
     let mut depth: Option<u8> = None;
     let mut movetime: Option<u64> = None;
