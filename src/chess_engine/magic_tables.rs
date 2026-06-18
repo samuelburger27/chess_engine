@@ -46,11 +46,11 @@ impl MagicEntry {
     /// // no blockers hashes to 0 regardless of the magic
     /// assert_eq!(entry.magic_index(Bitboard::new()), 0);
     /// ```
-    #[must_use] 
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn magic_index(&self, blockers: Bitboard) -> usize {
         let blockers = blockers & self.mask;
         let hash = blockers.0.wrapping_mul(self.magic);
-        
         (hash >> self.shift) as usize
     }
 }
@@ -58,6 +58,7 @@ impl MagicEntry {
 /// Searches random candidates until it finds a magic number that maps every
 /// blocker configuration for `pos` to a collision-free table slot, returning
 /// the resulting [`MagicEntry`] and its filled table.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn find_magic(
     deltas: &[(i8, i8); 4],
     blockers: &[Bitboard],
@@ -86,6 +87,7 @@ fn find_magic(
 /// Attempts to fill the attack table for `pos` using `magic_entry`, iterating
 /// every blocker subset. Returns `Err` if two different attack sets collide on
 /// one slot, meaning the candidate magic is unusable.
+#[allow(clippy::trivially_copy_pass_by_ref, clippy::cast_possible_truncation)]
 fn try_make_table(
     deltas: &[(i8, i8); 4],
     pos: Position,
@@ -120,6 +122,7 @@ fn try_make_table(
 /// Finds magics for all 64 squares of one slider and prints them as the Rust
 /// source (a `MagicEntry` array plus its table size) that gets pasted into
 /// `computed_boards.rs`.
+#[allow(clippy::trivially_copy_pass_by_ref, clippy::cast_possible_truncation)]
 fn find_and_print_all_magics(
     deltas: &[(i8, i8); 4],
     blockers: &[Bitboard],
@@ -127,9 +130,7 @@ fn find_and_print_all_magics(
     rng: &mut Pcg64Mcg,
 ) {
     println!("#[rustfmt::skip]");
-    println!(
-        "pub const {slider_name}_MAGICS: &[MagicEntry; MAX_POS] = &["
-    );
+    println!("pub const {slider_name}_MAGICS: &[MagicEntry; MAX_POS] = &[");
     let mut total_table_size = 0;
     for i in 0..64 {
         let pos = Position::new(i);
@@ -143,9 +144,7 @@ fn find_and_print_all_magics(
         total_table_size += table.len();
     }
     println!("];");
-    println!(
-        "pub const {slider_name}_TABLE_SIZE: usize = {total_table_size};"
-    );
+    println!("pub const {slider_name}_TABLE_SIZE: usize = {total_table_size};");
 }
 
 /// Offline tool: regenerates and prints all rook and bishop magic tables.
@@ -153,8 +152,10 @@ fn find_and_print_all_magics(
 /// Not used during play — the generated numbers already live as `const` arrays
 /// in `computed_boards.rs`. Pass `Some(seed)` to reproduce a known set.
 pub fn find_magics(magic_num_seed: Option<u64>) {
-    let mut rng = magic_num_seed
-        .map_or_else(|| Pcg64Mcg::from_rng(&mut rand::rng()), Pcg64Mcg::seed_from_u64);
+    let mut rng = magic_num_seed.map_or_else(
+        || Pcg64Mcg::from_rng(&mut rand::rng()),
+        Pcg64Mcg::seed_from_u64,
+    );
 
     find_and_print_all_magics(&BISHOP_DELTAS, &BISHOP_BLOCKERS, "BISHOP", &mut rng);
     find_and_print_all_magics(&ROOK_DELTAS, &ROOK_BLOCKERS, "ROOK", &mut rng);

@@ -34,7 +34,7 @@ impl CastleRights {
     /// assert!(cr.can_castle(WHITE, true));
     /// assert!(cr.can_castle(BLACK, false));
     /// ```
-    #[must_use] 
+    #[must_use]
     pub const fn make_default() -> Self {
         Self { flags: 0b1111 }
     }
@@ -49,7 +49,8 @@ impl CastleRights {
     /// assert!(cr.can_castle(WHITE, true));
     /// assert!(!cr.can_castle(WHITE, false));
     /// ```
-    #[must_use] 
+    #[must_use]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub const fn make(
         white_king_side: bool,
         white_queen_side: bool,
@@ -74,7 +75,7 @@ impl CastleRights {
 
     /// Returns `true` if the given player may still castle on the given side
     /// (`king_side = true` for the short castle, `false` for the long castle).
-    #[must_use] 
+    #[must_use]
     pub fn can_castle(&self, turn: Turn, king_side: bool) -> bool {
         self.flags & (1 << self.castle_index(turn, king_side)) != 0
     }
@@ -87,13 +88,13 @@ impl CastleRights {
 
     /// Returns the `0..4` bit index for a `(player, side)` pair
     /// (`2 * colour + 0/1`); see the [module documentation](self).
-    #[must_use] 
+    #[must_use]
     pub fn castle_index(&self, turn: Turn, king_side: bool) -> usize {
         2 * usize::from(turn) + usize::from(!king_side)
     }
 
     /// Returns `true` if the right at the raw bit `index` (`0..4`) is set.
-    #[must_use] 
+    #[must_use]
     pub const fn castle_at_index(&self, index: usize) -> bool {
         self.flags & (1 << index) != 0
     }

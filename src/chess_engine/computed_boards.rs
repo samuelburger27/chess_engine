@@ -45,6 +45,7 @@ pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| ZobristTable
 
 /// Fills a slider's attack table: for every square, enumerates all blocker
 /// subsets (Carry-Rippler) and stores the reachable squares at the magic index.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn generate_slide_piece_attack_tables(
     slider_deltas: &[(i8, i8); 4],
     magics: &[MagicEntry; Position::MAX_POS],
@@ -74,6 +75,7 @@ fn generate_slide_piece_attack_tables(
 /// Builds the relevant-blocker mask for each square: the squares a slider's
 /// rays pass through, excluding the slider's own square (board edges are
 /// implicitly excluded because a ray's final square cannot block movement).
+#[allow(clippy::trivially_copy_pass_by_ref)]
 const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Position::MAX_POS] {
     let mut moves = [EMPTY_BIT_B; Position::MAX_POS];
     let mut square = 0;
@@ -97,6 +99,7 @@ const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Pos
 
 /// Builds, for each square, the bitboard of the up-to-eight adjacent squares a
 /// king can step to.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 const fn generate_king_ring_moves() -> [Bitboard; Position::MAX_POS] {
     let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
@@ -130,6 +133,7 @@ const fn generate_king_ring_moves() -> [Bitboard; Position::MAX_POS] {
 
 /// Builds, for each square, the bitboard of the up-to-eight L-shaped squares a
 /// knight can jump to.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
     let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
@@ -308,4 +312,4 @@ pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x7E80808080808000), magic: 0x0028005484010022, shift: 52, offset: 98304 },
 ];
 /// Number of entries in [`ROOK_ATTACKS`] (sum of all per-square block sizes).
-pub const ROOK_TABLE_SIZE: usize = 102400;
+pub const ROOK_TABLE_SIZE: usize = 102_400;

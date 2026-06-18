@@ -219,6 +219,7 @@ impl Board {
     /// Placeholder for refreshing the cached [`GameState`]. Currently a no-op:
     /// terminal results are detected inside the search instead (see the
     /// commented-out reference implementation below).
+    #[allow(clippy::unused_self)]
     pub(crate) const fn update_game_result(&self) {
         // this method should be called when creating board and when committing a move
         // TODO finish

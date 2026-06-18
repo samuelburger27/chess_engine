@@ -5,9 +5,9 @@ use super::bitboard::Bitboard;
 
 /// Every square except the a-file; AND with this before an eastward shift to
 /// stop pawns/pieces wrapping around the board edge.
-pub const NOT_A_FILE: Bitboard = Bitboard(0xFEFEFEFEFEFEFEFE);
+pub const NOT_A_FILE: Bitboard = Bitboard(0xFEFE_FEFE_FEFE_FEFE);
 /// Every square except the h-file; AND with this before a westward shift.
-pub const NOT_H_FILE: Bitboard = Bitboard(0x7F7F7F7F7F7F7F7F);
+pub const NOT_H_FILE: Bitboard = Bitboard(0x7F7F_7F7F_7F7F_7F7F);
 
 /// Bit representation of rank 1.
 pub const RANK_1: Bitboard = Bitboard(0x0000_0000_0000_00FF);
@@ -21,12 +21,12 @@ pub const RANK_8: Bitboard = Bitboard(0xFF00_0000_0000_0000);
 // bits that should be empty when castling
 /// Squares (f8, g8) that must be empty for Black to castle king-side.
 pub const B_KING_CASTLE_EMPTY: Bitboard =
-    Bitboard(0b01100000_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+    Bitboard(0b0110_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
 /// Squares (b8, c8, d8) that must be empty for Black to castle queen-side.
 pub const B_QUEEN_CASTLE_EMPTY: Bitboard =
-    Bitboard(0b00001110_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+    Bitboard(0b0000_1110_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
 
 /// Squares (f1, g1) that must be empty for White to castle king-side.
-pub const W_KING_CASTLE_EMPTY: Bitboard = Bitboard(0b01100000);
+pub const W_KING_CASTLE_EMPTY: Bitboard = Bitboard(0b0110_0000);
 /// Squares (b1, c1, d1) that must be empty for White to castle queen-side.
-pub const W_QUEEN_CASTLE_EMPTY: Bitboard = Bitboard(0b00001110);
+pub const W_QUEEN_CASTLE_EMPTY: Bitboard = Bitboard(0b0000_1110);

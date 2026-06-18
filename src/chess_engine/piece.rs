@@ -41,7 +41,7 @@ impl Piece {
     /// assert_eq!(Piece::Queen.get_piece_value(), 900);
     /// assert_eq!(Piece::None.get_piece_value(), 0);
     /// ```
-    #[must_use] 
+    #[must_use]
     pub const fn get_piece_value(&self) -> i32 {
         match self {
             Self::Pawn => 200,
@@ -63,7 +63,7 @@ impl Piece {
     /// use chess_engine::chess_engine::piece::Piece;
     /// assert_eq!(Piece::Knight.to_notation(), "n");
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn to_notation(&self) -> String {
         match self {
             Self::Pawn => "p",
