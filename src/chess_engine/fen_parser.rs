@@ -134,9 +134,15 @@ mod tests {
         assert_eq!(board.turn, WHITE);
         assert_eq!(board.fullmove_count, 1);
         // back-rank corners hold rooks of the right colour
-        assert_eq!(board.get_piece_at(Position::new(0)), Some((Piece::Rook, WHITE))); // a1
-        assert_eq!(board.get_piece_at(Position::new(63)), Some((Piece::Rook, BLACK))); // h8
-        // the centre is empty
+        assert_eq!(
+            board.get_piece_at(Position::new(0)),
+            Some((Piece::Rook, WHITE))
+        ); // a1
+        assert_eq!(
+            board.get_piece_at(Position::new(63)),
+            Some((Piece::Rook, BLACK))
+        ); // h8
+           // the centre is empty
         assert_eq!(board.get_piece_at(Position::new(28)), None); // e4
     }
 
