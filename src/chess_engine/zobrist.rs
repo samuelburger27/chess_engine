@@ -3,7 +3,7 @@ use crate::chess_engine::{
     piece::PIECE_COUNT,
     position::Position,
 };
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
 pub type ZobristHash = u64;
@@ -18,30 +18,30 @@ pub struct ZobristTable {
 
 impl ZobristTable {
     pub fn new(seed: Option<u64>) -> Self {
-        let mut rng = Pcg64Mcg::from_entropy();
+        let mut rng = Pcg64Mcg::from_rng(&mut rand::rng());
         if let Some(seed) = seed {
             rng = Pcg64Mcg::seed_from_u64(seed);
         }
         let mut table = ZobristTable {
             piece_square: [[[0; Position::MAX_POS]; PIECE_COUNT]; PLAYER_COUNT],
             //piece_square: [0; Position::MAX_POS * PLAYER_COUNT * PIECE_COUNT],
-            white_to_move: rng.gen(),
+            white_to_move: rng.random(),
             castle_rights: [0; 4],
             en_passant_file: [0; 8],
         };
         for player in 0..PLAYER_COUNT {
             for piece in 0..PIECE_COUNT {
                 for pos in 0..Position::MAX_POS {
-                    table.piece_square[player][piece][pos] = rng.gen();
+                    table.piece_square[player][piece][pos] = rng.random();
                 }
             }
         }
         for i in 0..4 {
-            table.castle_rights[i] = rng.gen();
+            table.castle_rights[i] = rng.random();
         }
 
         for i in 0..8 {
-            table.en_passant_file[i] = rng.gen();
+            table.en_passant_file[i] = rng.random();
         }
         table
     }
