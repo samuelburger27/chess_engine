@@ -135,7 +135,7 @@ fn handle_go(parts: &[&str], state: &mut EngineState) {
     state.search_thread = Some(std::thread::spawn(move || {
         let result = search_position(&mut board, limits, &stop, true);
         match result.best_move {
-            Some(best_move) => println!("bestmove {}", best_move.to_string()),
+            Some(best_move) => println!("bestmove {best_move}"),
             None => println!("bestmove 0000"),
         }
     }));
@@ -174,28 +174,26 @@ fn parse_go_limits(parts: &[&str], board: &Board) -> SearchLimits {
         }
     }
 
-    let budget_ms = if let Some(movetime) = movetime {
-        Some(movetime.saturating_sub(MOVE_OVERHEAD_MS).max(1))
-    } else {
-        let (my_time, my_inc) = if board.turn == WHITE {
-            (wtime, winc.unwrap_or(0))
-        } else {
-            (btime, binc.unwrap_or(0))
-        };
-        my_time.map(|remaining| {
-            // simple allocation: a slice of the remaining clock plus half the
-            // increment, never more than half the clock
-            let budget = remaining / 25 + my_inc / 2;
-            budget
-                .min(remaining.saturating_sub(MOVE_OVERHEAD_MS) / 2)
-                .max(1)
-        })
-    };
+    let budget_ms = movetime.map_or_else(
+        || {
+            let (my_time, my_inc) = if board.turn == WHITE {
+                (wtime, winc.unwrap_or(0))
+            } else {
+                (btime, binc.unwrap_or(0))
+            };
+            my_time.map(|remaining| {
+                // simple allocation: a slice of the remaining clock plus half the
+                // increment, never more than half the clock
+                let budget = remaining / 25 + my_inc / 2;
+                budget
+                    .min(remaining.saturating_sub(MOVE_OVERHEAD_MS) / 2)
+                    .max(1)
+            })
+        },
+        |movetime| Some(movetime.saturating_sub(MOVE_OVERHEAD_MS).max(1)),
+    );
 
-    let mut limits = match depth {
-        Some(depth) => SearchLimits::depth(depth),
-        None => SearchLimits::infinite(),
-    };
+    let mut limits = depth.map_or_else(SearchLimits::infinite, SearchLimits::depth);
     // bare `go` (no depth and no clocks) would search forever; give it a
     // small default budget so the engine stays usable interactively
     if budget_ms.is_none() && depth.is_none() {

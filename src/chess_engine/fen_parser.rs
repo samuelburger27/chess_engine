@@ -40,7 +40,7 @@ impl Board {
     /// // every field must be present
     /// assert!(Board::from_fen("garbage").is_err());
     /// ```
-    pub fn from_fen(string: &str) -> Result<Board, String> {
+    pub fn from_fen(string: &str) -> Result<Self, String> {
         let mut piece_boards = [EMPTY_BIT_B; PIECE_COUNT * PLAYER_COUNT];
 
         let parts: Vec<&str> = string.split_whitespace().collect();
@@ -64,7 +64,7 @@ impl Board {
                     };
                     let position = Position::from_file_and_rank(x, 7 - rank_index);
 
-                    let piece_index = Board::get_bb_index(piece, turn);
+                    let piece_index = Self::get_bb_index(piece, turn);
                     piece_boards[piece_index].set_square(position.as_usize());
                     x += 1;
                 }
@@ -111,7 +111,7 @@ impl Board {
         // fullmove
         let full_move = parts[5].parse::<u16>().map_err(|_| "Invalid fullmove")?;
 
-        Ok(Board::new_from_bitboards(
+        Ok(Self::new_from_bitboards(
             piece_boards,
             turn,
             en_passant,

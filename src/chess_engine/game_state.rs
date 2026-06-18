@@ -14,7 +14,7 @@ use crate::chess_engine::{
 
 /// Snapshot of the irreversible board state captured before a move, so the move
 /// can later be undone. See the [module documentation](self).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StateDelta {
     /// The move that was applied.
     pub move_: Move,
@@ -33,15 +33,15 @@ pub struct StateDelta {
 
 impl StateDelta {
     /// Bundles the pre-move state into a [`StateDelta`].
-    pub fn new(
+    pub const fn new(
         move_: Move,
         captured_piece: Option<Piece>,
         en_pass: Bitboard,
         castle_rights: CastleRights,
         halfmove: u8,
         zobrist_hash: ZobristHash,
-    ) -> StateDelta {
-        StateDelta {
+    ) -> Self {
+        Self {
             move_,
             captured_piece,
             en_pass,

@@ -80,7 +80,7 @@ pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> 
 ///
 /// This is the slow, blocker-aware reference used when *building* the magic
 /// attack tables; runtime move generation reads those tables directly.
-pub(crate) fn get_sliding_moves(
+pub fn get_sliding_moves(
     deltas: &[(i8, i8); 4],
     pos: Position,
     blockers: Bitboard,

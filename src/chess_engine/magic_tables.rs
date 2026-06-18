@@ -130,7 +130,6 @@ fn find_and_print_all_magics(
     println!(
         "pub const {slider_name}_MAGICS: &[MagicEntry; MAX_POS] = &["
     );
-    let mut attack_table: Vec<Bitboard> = Vec::new();
     let mut total_table_size = 0;
     for i in 0..64 {
         let pos = Position::new(i);
@@ -142,7 +141,6 @@ fn find_and_print_all_magics(
             entry.mask.0, entry.magic, entry.shift, total_table_size
         );
         total_table_size += table.len();
-        attack_table.extend(table);
     }
     println!("];");
     println!(
@@ -155,10 +153,8 @@ fn find_and_print_all_magics(
 /// Not used during play — the generated numbers already live as `const` arrays
 /// in `computed_boards.rs`. Pass `Some(seed)` to reproduce a known set.
 pub fn find_magics(magic_num_seed: Option<u64>) {
-    let mut rng = Pcg64Mcg::from_rng(&mut rand::rng());
-    if let Some(seed) = magic_num_seed {
-        rng = Pcg64Mcg::seed_from_u64(seed);
-    }
+    let mut rng = magic_num_seed
+        .map_or_else(|| Pcg64Mcg::from_rng(&mut rand::rng()), Pcg64Mcg::seed_from_u64);
 
     find_and_print_all_magics(&BISHOP_DELTAS, &BISHOP_BLOCKERS, "BISHOP", &mut rng);
     find_and_print_all_magics(&ROOK_DELTAS, &ROOK_BLOCKERS, "ROOK", &mut rng);

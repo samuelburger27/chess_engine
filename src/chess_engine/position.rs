@@ -31,15 +31,15 @@ impl Position {
 
     /// Every board square, indexed by its own square number; useful for
     /// iterating over the whole board.
-    pub const ALL_POS: [Position; Position::MAX_POS] = Position::generate_all_pos();
+    pub const ALL_POS: [Self; Self::MAX_POS] = Self::generate_all_pos();
 
     /// Builds the [`ALL_POS`](Self::ALL_POS) array at compile time.
     #[must_use] 
-    pub const fn generate_all_pos() -> [Position; Position::MAX_POS] {
-        let mut result = [Position(0); Position::MAX_POS];
+    pub const fn generate_all_pos() -> [Self; Self::MAX_POS] {
+        let mut result = [Self(0); Self::MAX_POS];
         let mut index = 0;
-        while index < Position::MAX_POS {
-            result[index] = Position(index);
+        while index < Self::MAX_POS {
+            result[index] = Self(index);
             index += 1;
         }
         result
@@ -56,8 +56,8 @@ impl Position {
     /// assert_eq!(Position::new(28).as_usize(), 28);
     /// ```
     #[must_use] 
-    pub const fn new(index: usize) -> Position {
-        assert!(index < Position::MAX_POS, "Index must be between 0 and 63");
+    pub const fn new(index: usize) -> Self {
+        assert!(index < Self::MAX_POS, "Index must be between 0 and 63");
         Self(index)
     }
 
@@ -73,7 +73,7 @@ impl Position {
     /// assert_eq!(Position::from_file_and_rank(7, 7).as_usize(), 63); // h8
     /// ```
     #[must_use] 
-    pub const fn from_file_and_rank(file: usize, rank: usize) -> Position {
+    pub const fn from_file_and_rank(file: usize, rank: usize) -> Self {
         assert!(
             file < 8 && rank < 8,
             "File and rank must be between 0 and 7"
@@ -88,7 +88,7 @@ impl Position {
     /// assert_eq!(Position::new(28).get_file_and_rank(), (4, 3)); // e4
     /// ```
     #[must_use] 
-    pub fn get_file_and_rank(&self) -> (usize, usize) {
+    pub const fn get_file_and_rank(&self) -> (usize, usize) {
         let file = self.0 % 8;
         let rank = self.0 / 8;
         (file, rank)
@@ -108,7 +108,7 @@ impl Position {
         let file = (self.0 % 8) as i8 + d_file;
         let rank = (self.0 / 8) as i8 + d_rank;
         if file >= 0 && rank >= 0 && file < 8 && rank < 8 {
-            return Some(Position::from_file_and_rank(file as usize, rank as usize));
+            return Some(Self::from_file_and_rank(file as usize, rank as usize));
         }
         None
     }
@@ -120,7 +120,7 @@ impl Position {
     pub fn try_offset(&self, offset: i8) -> Option<Self> {
         let index = self.0 as i8 + offset;
         if (0..64).contains(&index) {
-            return Some(Position(index as usize));
+            return Some(Self(index as usize));
         }
         None
     }
@@ -209,7 +209,7 @@ impl TryFrom<&str> for Position {
         if rank > 8 {
             return Err(());
         }
-        Ok(Position::from_file_and_rank(file, (rank - 1) as usize))
+        Ok(Self::from_file_and_rank(file, (rank - 1) as usize))
     }
 }
 

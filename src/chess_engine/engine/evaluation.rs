@@ -123,7 +123,7 @@ const KING_PST_EG: [i32; 64] = [
 ///
 /// White squares are flipped vertically (`sq ^ 56`) so they read the table from
 /// White's perspective; black squares index it directly.
-fn pst_index(square: usize, is_white: bool) -> usize {
+const fn pst_index(square: usize, is_white: bool) -> usize {
     if is_white {
         square ^ 56
     } else {

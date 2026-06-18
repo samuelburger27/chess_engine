@@ -9,7 +9,7 @@
 
 /// A chess piece type. The discriminants `0..6` double as bitboard indices
 /// (see the [module documentation](self)); [`None`](Piece::None) means "no piece".
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Piece {
     /// Pawn (index 0).
     Pawn = 0,
@@ -42,15 +42,15 @@ impl Piece {
     /// assert_eq!(Piece::None.get_piece_value(), 0);
     /// ```
     #[must_use] 
-    pub fn get_piece_value(&self) -> i32 {
+    pub const fn get_piece_value(&self) -> i32 {
         match self {
-            Piece::Pawn => 200,
-            Piece::Rook => 500,
-            Piece::Knight => 320,
-            Piece::Bishop => 330,
-            Piece::King => 2000,
-            Piece::Queen => 900,
-            Piece::None => 0,
+            Self::Pawn => 200,
+            Self::Rook => 500,
+            Self::Knight => 320,
+            Self::Bishop => 330,
+            Self::King => 2000,
+            Self::Queen => 900,
+            Self::None => 0,
         }
     }
 }
@@ -66,13 +66,13 @@ impl Piece {
     #[must_use] 
     pub fn to_notation(&self) -> String {
         match self {
-            Piece::Pawn => "p",
-            Piece::Rook => "r",
-            Piece::Knight => "n",
-            Piece::Bishop => "b",
-            Piece::King => "k",
-            Piece::Queen => "q",
-            Piece::None => "-",
+            Self::Pawn => "p",
+            Self::Rook => "r",
+            Self::Knight => "n",
+            Self::Bishop => "b",
+            Self::King => "k",
+            Self::Queen => "q",
+            Self::None => "-",
         }
         .to_string()
     }
@@ -93,13 +93,13 @@ impl TryFrom<&str> for Piece {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "P" | "p" => Ok(Piece::Pawn),
-            "R" | "r" => Ok(Piece::Rook),
-            "N" | "n" => Ok(Piece::Knight),
-            "B" | "b" => Ok(Piece::Bishop),
-            "Q" | "q" => Ok(Piece::Queen),
-            "K" | "k" => Ok(Piece::King),
-            " " | "-" => Ok(Piece::None),
+            "P" | "p" => Ok(Self::Pawn),
+            "R" | "r" => Ok(Self::Rook),
+            "N" | "n" => Ok(Self::Knight),
+            "B" | "b" => Ok(Self::Bishop),
+            "Q" | "q" => Ok(Self::Queen),
+            "K" | "k" => Ok(Self::King),
+            " " | "-" => Ok(Self::None),
             _ => Err(()),
         }
     }
@@ -116,13 +116,13 @@ impl TryFrom<&str> for Piece {
 impl From<usize> for Piece {
     fn from(value: usize) -> Self {
         match value {
-            0 => Piece::Pawn,
-            1 => Piece::Rook,
-            2 => Piece::Knight,
-            3 => Piece::Bishop,
-            4 => Piece::King,
-            5 => Piece::Queen,
-            _ => Piece::None,
+            0 => Self::Pawn,
+            1 => Self::Rook,
+            2 => Self::Knight,
+            3 => Self::Bishop,
+            4 => Self::King,
+            5 => Self::Queen,
+            _ => Self::None,
         }
     }
 }
