@@ -15,7 +15,7 @@ warnings = "deny"
 [lints.clippy]
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
-#perf = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
 # Enable in future 
 # print_stdout = "deny"
 # print_stderr = "deny"
