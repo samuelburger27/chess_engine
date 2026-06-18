@@ -12,11 +12,10 @@ impl Position {
         let mut result = [Position(0); Position::MAX_POS];
         let mut index = 0;
         while index < Position::MAX_POS {
-            result[index] = Position(index); 
-            index+=1;
+            result[index] = Position(index);
+            index += 1;
         }
         result
-    
     }
 
     pub const fn new(index: usize) -> Position {

@@ -26,7 +26,6 @@ impl MagicEntry {
     }
 }
 
-
 // Given a sliding piece and a square, finds a magic number that
 // perfectly maps input blockers into its solution in a hash table
 fn find_magic(
