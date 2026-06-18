@@ -52,8 +52,7 @@ fn generate_slide_piece_attack_tables(
 ) -> Vec<Bitboard> {
     let mut table = vec![EMPTY_BIT_B; table_size];
     //table.reserve(table_size);
-    for pos in 0..Position::MAX_POS {
-        let magic_entry = &magics[pos];
+    for (pos, magic_entry) in magics.iter().enumerate() {
         let mask = magic_entry.mask;
 
         let mut blockers = EMPTY_BIT_B;

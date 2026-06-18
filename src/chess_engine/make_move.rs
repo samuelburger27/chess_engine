@@ -83,7 +83,7 @@ impl Board {
                 self.remove_piece(self.turn, moving_piece, origin);
                 self.add_piece(self.turn, moving_piece, destination);
                 let (rook_origin, rook_dest) =
-                    Board::get_castle_rook_origin_dest(self.turn, destination);
+                    Self::get_castle_rook_origin_dest(self.turn, destination);
                 self.remove_piece(self.turn, Piece::Rook, rook_origin);
                 self.add_piece(self.turn, Piece::Rook, rook_dest);
             }
@@ -231,7 +231,7 @@ impl Board {
             SpecialMove::Castle => {
                 self.add_piece(self.turn, moving_piece, origin);
                 self.remove_piece(self.turn, moving_piece, dest);
-                let (rook_origin, rook_dest) = Board::get_castle_rook_origin_dest(self.turn, dest);
+                let (rook_origin, rook_dest) = Self::get_castle_rook_origin_dest(self.turn, dest);
                 self.remove_piece(self.turn, Piece::Rook, rook_dest);
                 self.add_piece(self.turn, Piece::Rook, rook_origin);
             }
@@ -299,7 +299,7 @@ impl Board {
 
     /// Returns the `(origin, destination)` squares of the rook involved in a
     /// castle, inferred from the king's destination square `king_des`.
-    fn get_castle_rook_origin_dest(turn: Turn, king_des: Position) -> (Position, Position) {
+    const fn get_castle_rook_origin_dest(turn: Turn, king_des: Position) -> (Position, Position) {
         // return dest and origin of a rook that is moved during castle
         let (file, _) = king_des.get_file_and_rank();
         // queen side

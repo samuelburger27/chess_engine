@@ -27,7 +27,7 @@
 //! assert_eq!(m.to_string(), "e2e4");
 //! ```
 
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use super::position::Position;
 use crate::chess_engine::{
@@ -40,7 +40,7 @@ use crate::chess_engine::{
 };
 
 /// The kind of a move, decoded from a [`Move`]'s special-move bits.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum SpecialMove {
     /// A pawn reaching the last rank; the promotion bits select the new piece.
     Promotion,
@@ -83,33 +83,33 @@ const DEFAULT_MOVE: u16 = PROMOTE_TO_QUEEN | NORMAL_MOVE;
 impl Move {
     /// Wraps a raw 16-bit encoding without validation.
     #[must_use] 
-    pub fn make_raw(data: u16) -> Move {
-        Move(data)
+    pub const fn make_raw(data: u16) -> Self {
+        Self(data)
     }
 
     /// Returns the raw 16-bit encoding.
     #[must_use] 
-    pub fn get_raw(&self) -> u16 {
+    pub const fn get_raw(&self) -> u16 {
         self.0
     }
 
     /// Returns the destination square (bits 0–5).
     #[must_use] 
-    pub fn get_dest(&self) -> Position {
+    pub const fn get_dest(&self) -> Position {
         let mask = 0b0000000000111111u16;
         Position::new((mask & self.0) as usize)
     }
 
     /// Returns the origin square (bits 6–11).
     #[must_use] 
-    pub fn get_origin(&self) -> Position {
+    pub const fn get_origin(&self) -> Position {
         let mask = 0b0000_1111_1100_0000u16;
         Position::new(((mask & self.0) >> 6) as usize)
     }
 
     /// Returns the `(origin, destination)` pair.
     #[must_use] 
-    pub fn get_org_and_dest(&self) -> (Position, Position) {
+    pub const fn get_org_and_dest(&self) -> (Position, Position) {
         (self.get_origin(), self.get_dest())
     }
 
@@ -122,7 +122,7 @@ impl Move {
     /// assert_eq!(m.get_special_move(), SpecialMove::NormalMove);
     /// ```
     #[must_use] 
-    pub fn get_special_move(&self) -> SpecialMove {
+    pub const fn get_special_move(&self) -> SpecialMove {
         let mask = 0b1100000000000000u16;
         match self.0 & mask {
             PROMOTION => SpecialMove::Promotion,
@@ -136,7 +136,7 @@ impl Move {
     /// [`get_special_move`](Self::get_special_move) is [`SpecialMove::Promotion`];
     /// otherwise returns [`Piece::Queen`] (the default bit pattern).
     #[must_use] 
-    pub fn get_promotion(&self) -> Piece {
+    pub const fn get_promotion(&self) -> Piece {
         let mask: u16 = 0b0011000000000000u16;
         match self.0 & mask {
             PROMOTE_TO_KNIGHT => Piece::Knight,
@@ -156,7 +156,7 @@ impl Move {
     #[must_use] 
     pub fn new_default(origin: Position, destination: Position) -> Self {
         let mask = Self::create_move_mask(origin, destination);
-        Move(mask | DEFAULT_MOVE)
+        Self(mask | DEFAULT_MOVE)
     }
 
     /// Builds the four promotion moves (knight, bishop, rook, queen) for a pawn
@@ -172,12 +172,12 @@ impl Move {
     /// ```
     #[must_use] 
     pub fn new_promote(origin: Position, destination: Position) -> [Self; 4] {
-        let mask: u16 = Move::create_move_mask(origin, destination) | PROMOTION;
+        let mask: u16 = Self::create_move_mask(origin, destination) | PROMOTION;
         [
-            Move(mask | PROMOTE_TO_KNIGHT),
-            Move(mask | PROMOTE_TO_BISHOP),
-            Move(mask | PROMOTE_TO_ROOK),
-            Move(mask | PROMOTE_TO_QUEEN),
+            Self(mask | PROMOTE_TO_KNIGHT),
+            Self(mask | PROMOTE_TO_BISHOP),
+            Self(mask | PROMOTE_TO_ROOK),
+            Self(mask | PROMOTE_TO_QUEEN),
         ]
     }
 
@@ -187,7 +187,7 @@ impl Move {
     #[must_use] 
     pub fn new_special(origin: Position, destination: Position, special: u16) -> Self {
         let mask = Self::create_move_mask(origin, destination) | special;
-        Move(mask)
+        Self(mask)
     }
 
     /// Builds the castling move for `turn` on the given side, encoded as the
@@ -196,27 +196,31 @@ impl Move {
     pub fn new_castle(king_side: bool, turn: Turn) -> Self {
         if turn == WHITE {
             if king_side {
-                return Move::new_special(W_KING_START, W_KING_CASTLE_DEST, CASTLING);
+                return Self::new_special(W_KING_START, W_KING_CASTLE_DEST, CASTLING);
             }
-            return Move::new_special(W_KING_START, W_QUEEN_CASTLE_DEST, CASTLING);
+            return Self::new_special(W_KING_START, W_QUEEN_CASTLE_DEST, CASTLING);
         } else if king_side {
-            return Move::new_special(B_KING_START, B_KING_CASTLE_DEST, CASTLING);
+            return Self::new_special(B_KING_START, B_KING_CASTLE_DEST, CASTLING);
         }
-        Move::new_special(B_KING_START, B_QUEEN_CASTLE_DEST, CASTLING)
+        Self::new_special(B_KING_START, B_QUEEN_CASTLE_DEST, CASTLING)
     }
 }
 
 /// Formats the move in long algebraic / UCI notation: origin and destination
 /// squares, with the promotion piece letter appended for promotions (e.g.
 /// `"e2e4"`, `"e7e8q"`).
-impl ToString for Move {
-    fn to_string(&self) -> String {
-        let mut result =
-            self.get_origin().algebraic_notation() + &self.get_dest().algebraic_notation();
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            self.get_origin().algebraic_notation(),
+            self.get_dest().algebraic_notation()
+        )?;
         if self.get_special_move() == SpecialMove::Promotion {
-            result += &self.get_promotion().to_notation();
+            write!(f, "{}", self.get_promotion().to_notation())?;
         }
-        result
+        Ok(())
     }
 }
 

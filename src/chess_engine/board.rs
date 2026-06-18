@@ -39,7 +39,7 @@ pub const BLACK: Turn = true;
 
 /// High-level status of a position. Currently informational; the search derives
 /// terminal results (checkmate/draw) directly while exploring.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum GameState {
     /// Normal play, no special condition.
     Playing,
@@ -55,7 +55,7 @@ pub enum GameState {
 /// state (castling rights, en passant, clocks, Zobrist hash, undo history).
 ///
 /// See the [module documentation](self) for the bitboard layout and indexing.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Board {
     /// One bitboard per `(piece, colour)` pair, indexed by
     /// `get_bb_index` (white `0..6`, black `6..12`).
@@ -86,8 +86,8 @@ pub struct Board {
 }
 
 impl Board {
-    fn new_empty() -> Self {
-        Board {
+    const fn new_empty() -> Self {
+        Self {
             player_boards: [EMPTY_BIT_B, EMPTY_BIT_B],
             piece_boards: [
                 EMPTY_BIT_B,
@@ -118,7 +118,7 @@ impl Board {
     /// Builds a board from explicit piece bitboards and state, then derives the
     /// aggregate boards and the initial Zobrist hash. The twelve `piece_boards`
     /// must follow the `get_bb_index` layout.
-    #[must_use] 
+    #[must_use]
     pub fn new_from_bitboards(
         piece_boards: [Bitboard; PLAYER_COUNT * PIECE_COUNT],
         turn: Turn,
@@ -127,7 +127,7 @@ impl Board {
         fullmove: u16,
         castle_rights: CastleRights,
     ) -> Self {
-        let mut board = Board::new_empty();
+        let mut board = Self::new_empty();
         board.piece_boards = piece_boards;
         board.turn = turn;
         board.en_passant = en_passant;
@@ -155,8 +155,8 @@ impl Board {
     /// // a1 holds a white rook
     /// assert_eq!(board.get_piece_at(Position::new(0)), Some((Piece::Rook, WHITE)));
     /// ```
-    pub fn new_start_pos() -> Result<Board, String> {
-        Board::from_fen(START_POS_FEN)
+    pub fn new_start_pos() -> Result<Self, String> {
+        Self::from_fen(START_POS_FEN)
     }
 
     fn compute_initial_zobrist(&mut self) {
@@ -175,7 +175,7 @@ impl Board {
     /// // the opening position has plenty of material
     /// assert!(!Board::new_start_pos().unwrap().is_insufficient_material());
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn is_insufficient_material(&self) -> bool {
         let pawns = self.get_piece_bitboard(Piece::Pawn, WHITE)
             | self.get_piece_bitboard(Piece::Pawn, BLACK);
@@ -219,7 +219,7 @@ impl Board {
     /// Placeholder for refreshing the cached [`GameState`]. Currently a no-op:
     /// terminal results are detected inside the search instead (see the
     /// commented-out reference implementation below).
-    pub(crate) fn update_game_result(&mut self) {
+    pub(crate) const fn update_game_result(&self) {
         // this method should be called when creating board and when committing a move
         // TODO finish
         // TODO maybe think about
@@ -243,7 +243,7 @@ impl Board {
     /// sync.
     pub(crate) fn remove_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
         // remove piece from bitboard and zobrist key
-        let bb_index = Board::get_bb_index(piece, turn);
+        let bb_index = Self::get_bb_index(piece, turn);
         self.piece_boards[bb_index].clear_square(pos.as_usize());
         self.xor_piece_from_zobrist(turn, piece, pos);
     }
@@ -251,7 +251,7 @@ impl Board {
     /// Adds `piece` of colour `turn` at `pos`, keeping the Zobrist hash in sync.
     pub(crate) fn add_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
         // add piece to bitboard and zobrist key
-        let bb_index = Board::get_bb_index(piece, turn);
+        let bb_index = Self::get_bb_index(piece, turn);
         self.piece_boards[bb_index].set_square(pos.as_usize());
         self.xor_piece_from_zobrist(turn, piece, pos);
     }
@@ -301,9 +301,9 @@ impl Board {
     }
 
     /// Returns the bitboard of all `piece`s belonging to `turn`.
-    #[must_use] 
+    #[must_use]
     pub fn get_piece_bitboard(&self, piece: Piece, turn: Turn) -> Bitboard {
-        self.piece_boards[Board::get_bb_index(piece, turn)]
+        self.piece_boards[Self::get_bb_index(piece, turn)]
     }
 
     /// Maps a `(piece, colour)` pair to its index into
@@ -321,7 +321,7 @@ impl Board {
     /// Returns `true` if `attacking_player` attacks `tile`. Implemented by
     /// generating that side's pseudo-legal non-castle moves and checking whether
     /// any targets `tile`.
-    #[must_use] 
+    #[must_use]
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {
         let moves = generate_pseudo_non_castle_moves(self, attacking_player);
         moves.iter().any(|m| m.get_dest() == tile)
@@ -338,7 +338,7 @@ impl Board {
     /// let board = Board::from_fen("4k3/8/8/8/8/8/8/r3K3 w - - 0 1").unwrap();
     /// assert!(board.in_check(WHITE));
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn in_check(&self, turn: Turn) -> bool {
         let king_board = self.get_piece_bitboard(Piece::King, turn);
         let king_pos = Position::new(king_board.trailing_zeros());
@@ -368,7 +368,7 @@ impl Board {
 
     /// Returns the `(piece, colour)` occupying `pos`, or `None` if the square is
     /// empty.
-    #[must_use] 
+    #[must_use]
     pub fn get_piece_at(&self, pos: Position) -> Option<(Piece, Turn)> {
         for (index, board) in self.piece_boards.iter().enumerate() {
             if board.is_square_set(pos.into()) {

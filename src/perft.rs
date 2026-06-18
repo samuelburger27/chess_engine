@@ -41,10 +41,11 @@ pub fn perft(board: &mut Board, depth: u32) -> u64 {
     nodes
 }
 
-/// Runs [`perft`] one ply at a time, printing the node count under each root
-/// move and then the total. This is the per-move breakdown used to localise
-/// move-generation bugs by diffing against another engine (the UCI
-/// `go perft <n>` command calls this).
+/// Per-move perft breakdown: prints each root move with its node count, then
+/// the total.
+///
+/// Used to localise move-generation bugs by diffing against another engine
+/// (the UCI `go perft <n>` command calls this).
 pub fn perft_divide(board: &mut Board, depth: u32) {
     let moves = board.generate_moves(board.turn);
     let mut total_nodes = 0;
@@ -53,7 +54,7 @@ pub fn perft_divide(board: &mut Board, depth: u32) {
         let mut new_board = board.clone();
         new_board.commit_verified_move(mv);
         let nodes = perft(&mut new_board, depth - 1);
-        println!("{}: {}", mv.to_string(), nodes);
+        println!("{mv}: {nodes}");
         total_nodes += nodes;
     }
 

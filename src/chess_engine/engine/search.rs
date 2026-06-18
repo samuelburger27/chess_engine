@@ -51,7 +51,7 @@ impl SearchLimits {
     /// time limit.
     #[must_use] 
     pub fn depth(depth: u8) -> Self {
-        SearchLimits {
+        Self {
             depth: depth.min(MAX_DEPTH),
             deadline: None,
         }
@@ -60,8 +60,8 @@ impl SearchLimits {
     /// An unbounded search (to [`MAX_DEPTH`], no deadline); stopped only via the
     /// stop flag.
     #[must_use] 
-    pub fn infinite() -> Self {
-        SearchLimits {
+    pub const fn infinite() -> Self {
+        Self {
             depth: MAX_DEPTH,
             deadline: None,
         }
@@ -135,10 +135,11 @@ pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
     search_position(&mut board.clone(), SearchLimits::depth(depth), &stop, false)
 }
 
-/// Iterative-deepening driver. Searches `board` until the depth limit,
-/// the deadline, or the stop flag ends the search, and returns the result of
-/// the last fully completed iteration. When `report` is set, a UCI `info`
-/// line is printed after every completed depth.
+/// Iterative-deepening driver over fail-soft negamax with alpha-beta pruning.
+///
+/// Searches `board` until the depth limit, the deadline, or the stop flag
+/// ends the search, and returns the result of the last fully completed
+/// iteration. When `report` is set, a UCI `info` line is printed per depth.
 pub fn search_position(
     board: &mut Board,
     limits: SearchLimits,
@@ -341,7 +342,7 @@ fn is_tactical(board: &Board, mv: &Move) -> bool {
 
 /// Material values (in centipawns) used only for move ordering; the positional
 /// [evaluation](super::evaluation) uses its own scale.
-fn piece_value(piece: Piece) -> i32 {
+const fn piece_value(piece: Piece) -> i32 {
     match piece {
         Piece::Pawn => 100,
         Piece::Knight => 320,

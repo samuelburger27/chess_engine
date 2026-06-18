@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// The set of still-available castling rights for both players.
 ///
 /// See the [module documentation](self) for the bit layout.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct CastleRights {
     // white_king_side, white_queen_side, black_king_side, black_queen_side
     flags: u8,
@@ -35,8 +35,8 @@ impl CastleRights {
     /// assert!(cr.can_castle(BLACK, false));
     /// ```
     #[must_use] 
-    pub fn make_default() -> Self {
-        CastleRights { flags: 0b1111 }
+    pub const fn make_default() -> Self {
+        Self { flags: 0b1111 }
     }
 
     /// Builds rights from four booleans, one per `(colour, side)` combination.
@@ -50,7 +50,7 @@ impl CastleRights {
     /// assert!(!cr.can_castle(WHITE, false));
     /// ```
     #[must_use] 
-    pub fn make(
+    pub const fn make(
         white_king_side: bool,
         white_queen_side: bool,
         black_king_side: bool,
@@ -69,7 +69,7 @@ impl CastleRights {
         if black_queen_side {
             flags |= BLACK_QUEEN_SIDE;
         }
-        CastleRights { flags }
+        Self { flags }
     }
 
     /// Returns `true` if the given player may still castle on the given side
@@ -94,7 +94,7 @@ impl CastleRights {
 
     /// Returns `true` if the right at the raw bit `index` (`0..4`) is set.
     #[must_use] 
-    pub fn castle_at_index(&self, index: usize) -> bool {
+    pub const fn castle_at_index(&self, index: usize) -> bool {
         self.flags & (1 << index) != 0
     }
 }

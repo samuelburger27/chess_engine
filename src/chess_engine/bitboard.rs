@@ -1,7 +1,7 @@
-//! A [`Bitboard`] is a `u64` in which each bit represents one square of the
-//! board, giving a compact set-of-squares representation that the rest of the
-//! engine is built on (one bitboard per piece type, the set of empty squares,
-//! attack masks, and so on).
+//! A [`Bitboard`] is a `u64` where each bit represents one board square.
+//!
+//! This compact set-of-squares representation underlies the whole engine
+//! (one bitboard per piece type, the set of empty squares, attack masks, etc.).
 //!
 //! # Square indexing
 //!
@@ -56,7 +56,7 @@ impl Bitboard {
     /// ```
     #[must_use] 
     pub const fn new() -> Self {
-        Bitboard(0)
+        Self(0)
     }
 
     /// Wraps a raw `u64`, treating each set bit as a member square.
@@ -67,7 +67,7 @@ impl Bitboard {
     /// ```
     #[must_use] 
     pub const fn from_u64(value: u64) -> Self {
-        Bitboard(value)
+        Self(value)
     }
 
     /// Returns a bitboard with every square set.
@@ -78,7 +78,7 @@ impl Bitboard {
     /// ```
     #[must_use] 
     pub const fn full() -> Self {
-        Bitboard(u64::MAX)
+        Self(u64::MAX)
     }
 
     // Basic square operations
@@ -98,14 +98,14 @@ impl Bitboard {
     }
 
     /// Removes `square` from the set. Out-of-range indices are ignored.
-    pub fn clear_square(&mut self, square: usize) {
+    pub const fn clear_square(&mut self, square: usize) {
         if square < 64 {
             self.0 &= !(1 << square);
         }
     }
 
     /// Flips membership of `square`. Out-of-range indices are ignored.
-    pub fn toggle_square(&mut self, square: usize) {
+    pub const fn toggle_square(&mut self, square: usize) {
         if square < 64 {
             self.0 ^= 1 << square;
         }
@@ -114,7 +114,7 @@ impl Bitboard {
     /// Returns `true` if `square` is a member of the set (always `false` for
     /// out-of-range indices).
     #[must_use] 
-    pub fn is_square_set(&self, square: usize) -> bool {
+    pub const fn is_square_set(&self, square: usize) -> bool {
         if square < 64 {
             (self.0 & (1 << square)) != 0
         } else {
@@ -126,7 +126,7 @@ impl Bitboard {
 
     /// Returns the underlying `u64`.
     #[must_use] 
-    pub fn get_bits(&self) -> u64 {
+    pub const fn get_bits(&self) -> u64 {
         self.0
     }
 
@@ -145,12 +145,12 @@ impl Bitboard {
     // Bit manipulation operations
 
     /// Clears every square (sets the board to empty).
-    pub fn clear(&mut self) {
+    pub const fn clear(&mut self) {
         self.0 = 0;
     }
 
     /// Sets every square (fills the board).
-    pub fn fill(&mut self) {
+    pub const fn fill(&mut self) {
         self.0 = u64::MAX;
     }
 
@@ -221,7 +221,7 @@ impl Bitboard {
     /// assert_eq!(bb.pop_lsb(), Some(3));
     /// assert_eq!(bb.pop_lsb(), None);
     /// ```
-    pub fn pop_lsb(&mut self) -> Option<usize> {
+    pub const fn pop_lsb(&mut self) -> Option<usize> {
         if self.0 == 0 {
             None
         } else {
@@ -234,16 +234,16 @@ impl Bitboard {
     /// Returns a bitboard containing only the least-significant set square
     /// (empty if `self` is empty).
     #[must_use] 
-    pub const fn lsb(&self) -> Bitboard {
+    pub const fn lsb(&self) -> Self {
         if self.0 == 0 {
-            Bitboard(0)
+            Self(0)
         } else {
-            Bitboard(self.0 & (0u64.wrapping_sub(self.0)))
+            Self(self.0 & (0u64.wrapping_sub(self.0)))
         }
     }
 
     /// Clears the least-significant set square in place.
-    pub fn reset_lsb(&mut self) {
+    pub const fn reset_lsb(&mut self) {
         self.0 &= self.0 - 1;
     }
 
@@ -257,11 +257,11 @@ impl Bitboard {
     /// assert_eq!(Bitboard::file_mask(0).get_bits(), 0x0101_0101_0101_0101);
     /// ```
     #[must_use] 
-    pub const fn file_mask(file: usize) -> Bitboard {
+    pub const fn file_mask(file: usize) -> Self {
         if file < 8 {
-            Bitboard(0x0101010101010101 << file)
+            Self(0x0101010101010101 << file)
         } else {
-            Bitboard(0)
+            Self(0)
         }
     }
 
@@ -273,23 +273,23 @@ impl Bitboard {
     /// assert_eq!(Bitboard::rank_mask(0).get_bits(), 0xFF);
     /// ```
     #[must_use] 
-    pub const fn rank_mask(rank: usize) -> Bitboard {
+    pub const fn rank_mask(rank: usize) -> Self {
         if rank < 8 {
-            Bitboard(0xFF << (rank * 8))
+            Self(0xFF << (rank * 8))
         } else {
-            Bitboard(0)
+            Self(0)
         }
     }
 
     /// Returns the subset of `self` that lies on `file`.
     #[must_use] 
-    pub fn get_file(&self, file: usize) -> Bitboard {
+    pub fn get_file(&self, file: usize) -> Self {
         *self & Self::file_mask(file)
     }
 
     /// Returns the subset of `self` that lies on `rank`.
     #[must_use] 
-    pub fn get_rank(&self, rank: usize) -> Bitboard {
+    pub fn get_rank(&self, rank: usize) -> Self {
         *self & Self::rank_mask(rank)
     }
 
@@ -336,7 +336,7 @@ impl Bitboard {
     /// assert_eq!(squares, vec![1, 3]);
     /// ```
     #[must_use] 
-    pub fn iter_set_bits(&self) -> BitboardIterator {
+    pub const fn iter_set_bits(&self) -> BitboardIterator {
         BitboardIterator { bitboard: *self }
     }
 
@@ -344,21 +344,21 @@ impl Bitboard {
     /// and vertically at the same time. See [`flip_vertical`](Self::flip_vertical)
     /// and [`rotate_180`](Self::rotate_180) for the individual transforms.
     #[must_use] 
-    pub const fn reverse(&self) -> Bitboard {
-        Bitboard(self.0.reverse_bits())
+    pub const fn reverse(&self) -> Self {
+        Self(self.0.reverse_bits())
     }
 
     /// Flips the board vertically by swapping ranks (`a1` ↔ `a8`); used to view
     /// a position from the other side's perspective.
     #[must_use] 
-    pub const fn flip_vertical(&self) -> Bitboard {
-        Bitboard(self.0.swap_bytes())
+    pub const fn flip_vertical(&self) -> Self {
+        Self(self.0.swap_bytes())
     }
 
     /// Rotates the board 180° (the composition of a horizontal and a vertical flip).
     #[must_use] 
-    pub const fn rotate_180(&self) -> Bitboard {
-        Bitboard(self.0.reverse_bits().swap_bytes())
+    pub const fn rotate_180(&self) -> Self {
+        Self(self.0.reverse_bits().swap_bytes())
     }
 
     /// Prints the board to stdout as an 8×8 grid (`X` for set squares), with
@@ -399,10 +399,10 @@ impl Iterator for BitboardIterator {
 
 // Bitwise operations implementations
 impl BitOr for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Bitboard(self.0 | rhs.0)
+        Self(self.0 | rhs.0)
     }
 }
 
@@ -413,10 +413,10 @@ impl BitOrAssign for Bitboard {
 }
 
 impl BitAnd for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Bitboard(self.0 & rhs.0)
+        Self(self.0 & rhs.0)
     }
 }
 
@@ -427,10 +427,10 @@ impl BitAndAssign for Bitboard {
 }
 
 impl BitXor for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Bitboard(self.0 ^ rhs.0)
+        Self(self.0 ^ rhs.0)
     }
 }
 
@@ -441,22 +441,22 @@ impl BitXorAssign for Bitboard {
 }
 
 impl Not for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn not(self) -> Self::Output {
-        Bitboard(!self.0)
+        Self(!self.0)
     }
 }
 
 // Shift operations implementations
 impl Shl<u32> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shl(self, rhs: u32) -> Self::Output {
         if rhs >= 64 {
-            Bitboard(0)
+            Self(0)
         } else {
-            Bitboard(self.0 << rhs)
+            Self(self.0 << rhs)
         }
     }
 }
@@ -472,13 +472,13 @@ impl ShlAssign<u32> for Bitboard {
 }
 
 impl Shr<u32> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shr(self, rhs: u32) -> Self::Output {
         if rhs >= 64 {
-            Bitboard(0)
+            Self(0)
         } else {
-            Bitboard(self.0 >> rhs)
+            Self(self.0 >> rhs)
         }
     }
 }
@@ -495,7 +495,7 @@ impl ShrAssign<u32> for Bitboard {
 
 // Additional shift implementations for different integer types
 impl Shl<usize> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shl(self, rhs: usize) -> Self::Output {
         self << (rhs as u32)
@@ -509,7 +509,7 @@ impl ShlAssign<usize> for Bitboard {
 }
 
 impl Shr<usize> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shr(self, rhs: usize) -> Self::Output {
         self >> (rhs as u32)
@@ -523,7 +523,7 @@ impl ShrAssign<usize> for Bitboard {
 }
 
 impl Shl<i8> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shl(self, rhs: i8) -> Self::Output {
         if rhs >= 0 {
@@ -545,7 +545,7 @@ impl ShlAssign<i8> for Bitboard {
 }
 
 impl Shr<i8> for Bitboard {
-    type Output = Bitboard;
+    type Output = Self;
 
     fn shr(self, rhs: i8) -> Self::Output {
         if rhs >= 0 {
@@ -592,7 +592,7 @@ impl fmt::Display for Bitboard {
 // From trait implementations
 impl From<u64> for Bitboard {
     fn from(value: u64) -> Self {
-        Bitboard(value)
+        Self(value)
     }
 }
 
