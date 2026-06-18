@@ -1,3 +1,8 @@
+//! Perft correctness tests: each case fixes a position to its published
+//! leaf-node count, so any change that breaks move generation, make, or unmake
+//! shows up as a mismatch. Positions are taken from the
+//! [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results).
+
 pub use chess_engine::{
     chess_engine::{board::Board, position::Position},
     perft::perft,

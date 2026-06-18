@@ -1,13 +1,39 @@
+//! A [`Position`] is a single board square stored as a `0..64` index.
+//!
+//! Squares are numbered the same way as in [`Bitboard`](super::bitboard):
+//! little-endian rank-file order with `a1 = 0`, `h1 = 7`, `a8 = 56`,
+//! `h8 = 63`. The index of a square is `rank * 8 + file`, where files run `0..8`
+//! (`a`–`h`) and ranks run `0..8` (ranks `1`–`8`).
+//!
+//! # Examples
+//!
+//! ```
+//! use chess_engine::chess_engine::position::Position;
+//!
+//! let e4 = Position::from_file_and_rank(4, 3);
+//! assert_eq!(e4.as_usize(), 28);
+//! assert_eq!(e4.algebraic_notation(), "e4");
+//! assert_eq!(Position::try_from("e4"), Ok(e4));
+//! ```
+
 use crate::chess_engine::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
 
+/// A single board square, stored as a `0..64` index.
+///
+/// See the [module documentation](self) for the square-numbering scheme.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Position(usize);
 
 impl Position {
+    /// The number of squares on the board (and the exclusive upper bound for a
+    /// valid index).
     pub const MAX_POS: usize = 64;
 
+    /// Every board square, indexed by its own square number; useful for
+    /// iterating over the whole board.
     pub const ALL_POS: [Position; Position::MAX_POS] = Position::generate_all_pos();
 
+    /// Builds the [`ALL_POS`](Self::ALL_POS) array at compile time.
     pub const fn generate_all_pos() -> [Position; Position::MAX_POS] {
         let mut result = [Position(0); Position::MAX_POS];
         let mut index = 0;
@@ -18,11 +44,32 @@ impl Position {
         result
     }
 
+    /// Creates a position from a raw square index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= 64`.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// assert_eq!(Position::new(28).as_usize(), 28);
+    /// ```
     pub const fn new(index: usize) -> Position {
         assert!(index < Position::MAX_POS, "Index must be between 0 and 63");
         Self(index)
     }
 
+    /// Creates a position from `(file, rank)` coordinates (each `0..8`).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `file >= 8` or `rank >= 8`.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// assert_eq!(Position::from_file_and_rank(0, 0).as_usize(), 0); // a1
+    /// assert_eq!(Position::from_file_and_rank(7, 7).as_usize(), 63); // h8
+    /// ```
     pub const fn from_file_and_rank(file: usize, rank: usize) -> Position {
         assert!(
             file < 8 && rank < 8,
@@ -31,12 +78,27 @@ impl Position {
         Self(rank * 8 + file)
     }
 
+    /// Returns the `(file, rank)` coordinates of this square.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// assert_eq!(Position::new(28).get_file_and_rank(), (4, 3)); // e4
+    /// ```
     pub fn get_file_and_rank(&self) -> (usize, usize) {
         let file = self.0 % 8;
         let rank = self.0 / 8;
         return (file, rank);
     }
 
+    /// Returns the square reached by shifting `d_file` files and `d_rank` ranks,
+    /// or `None` if that would leave the board. Used to walk piece-movement rays.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// let e4 = Position::new(28);
+    /// assert_eq!(e4.try_rank_file_offset(0, 1), Some(Position::new(36))); // e5
+    /// assert_eq!(Position::new(0).try_rank_file_offset(-1, 0), None); // off the a-file
+    /// ```
     pub const fn try_rank_file_offset(&self, d_file: i8, d_rank: i8) -> Option<Self> {
         let file = (self.0 % 8) as i8 + d_file;
         let rank = (self.0 / 8) as i8 + d_rank;
@@ -46,6 +108,9 @@ impl Position {
         None
     }
 
+    /// Returns the square `offset` indices away, or `None` if the result falls
+    /// outside `0..64`. Note that this does not respect file wrapping — use
+    /// [`try_rank_file_offset`](Self::try_rank_file_offset) when edges matter.
     pub fn try_offset(&self, offset: i8) -> Option<Self> {
         let index = self.0 as i8 + offset;
         if index >= 0 && index < 64 {
@@ -54,16 +119,29 @@ impl Position {
         None
     }
 
+    /// Returns the raw square index.
     pub const fn as_usize(&self) -> usize {
         return self.0;
     }
 
+    /// Returns a [`Bitboard`] with exactly this square set.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// assert!(Position::new(28).bitboard().is_square_set(28));
+    /// ```
     pub const fn bitboard(&self) -> Bitboard {
         let mut board = EMPTY_BIT_B;
         board.set_square(self.as_usize());
         board
     }
 
+    /// Returns the square in algebraic notation, e.g. `"e4"`.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::position::Position;
+    /// assert_eq!(Position::new(28).algebraic_notation(), "e4");
+    /// ```
     pub fn algebraic_notation(&self) -> String {
         let (file, rank) = self.get_file_and_rank();
         let file_str = match file {
@@ -84,6 +162,16 @@ impl Position {
     }
 }
 
+/// Parses a two-character algebraic square such as `"e4"`.
+///
+/// Returns `Err(())` if the string is not exactly a file letter (`a`–`h`)
+/// followed by a rank digit (`1`–`8`).
+///
+/// ```
+/// use chess_engine::chess_engine::position::Position;
+/// assert_eq!(Position::try_from("a1").unwrap().as_usize(), 0);
+/// assert!(Position::try_from("z9").is_err());
+/// ```
 impl TryFrom<&str> for Position {
     type Error = ();
 

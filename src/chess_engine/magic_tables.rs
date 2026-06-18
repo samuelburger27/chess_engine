@@ -1,3 +1,15 @@
+//! [Magic bitboards][magic]: O(1) attack lookup for sliding pieces.
+//!
+//! A rook or bishop's reachable squares depend only on the occupied squares
+//! along its rays (the "blockers"). A [`MagicEntry`] turns that blocker pattern
+//! into a small hash index — `(blockers & mask) * magic >> shift` — that points
+//! into a precomputed table of attack bitboards. The magic multipliers are
+//! found offline by [`find_magics`] and baked into
+//! `computed_boards.rs`; at runtime [`magic_index`](MagicEntry::magic_index) is
+//! all that is needed.
+//!
+//! [magic]: https://analog-hors.github.io/site/magic-bitboards/
+
 use super::bitboard::Bitboard;
 use crate::chess_engine::{
     computed_boards::{BISHOP_BLOCKERS, ROOK_BLOCKERS},
@@ -10,14 +22,30 @@ use rand_pcg::Pcg64Mcg;
 
 // inspired by https://analog-hors.github.io/site/magic-bitboards/
 
+/// The per-square magic-hashing parameters for one sliding piece.
 #[derive(Clone, Copy)]
 pub struct MagicEntry {
+    /// The relevant-blocker mask (the ray squares, excluding the board edge).
     pub mask: Bitboard,
+    /// The magic multiplier that spreads masked blockers into a unique index.
     pub magic: u64,
+    /// Right-shift applied after multiplying, sizing the index to the table.
     pub shift: u8,
+    /// Base offset of this square's block within the shared attack table.
     pub offset: usize,
 }
 impl MagicEntry {
+    /// Hashes a blocker configuration to its index *within this square's block*
+    /// (callers add [`offset`](Self::offset) to reach the shared table).
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::magic_tables::MagicEntry;
+    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    ///
+    /// let entry = MagicEntry { mask: Bitboard::full(), magic: 0xdead_beef, shift: 58, offset: 0 };
+    /// // no blockers hashes to 0 regardless of the magic
+    /// assert_eq!(entry.magic_index(Bitboard::new()), 0);
+    /// ```
     pub fn magic_index(&self, blockers: Bitboard) -> usize {
         let blockers = blockers & self.mask;
         let hash = blockers.0.wrapping_mul(self.magic);
@@ -26,8 +54,9 @@ impl MagicEntry {
     }
 }
 
-// Given a sliding piece and a square, finds a magic number that
-// perfectly maps input blockers into its solution in a hash table
+/// Searches random candidates until it finds a magic number that maps every
+/// blocker configuration for `pos` to a collision-free table slot, returning
+/// the resulting [`MagicEntry`] and its filled table.
 fn find_magic(
     deltas: &[(i8, i8); 4],
     blockers: &[Bitboard],
@@ -53,6 +82,9 @@ fn find_magic(
     }
 }
 
+/// Attempts to fill the attack table for `pos` using `magic_entry`, iterating
+/// every blocker subset. Returns `Err` if two different attack sets collide on
+/// one slot, meaning the candidate magic is unusable.
 fn try_make_table(
     deltas: &[(i8, i8); 4],
     pos: Position,
@@ -84,6 +116,9 @@ fn try_make_table(
     Ok(table)
 }
 
+/// Finds magics for all 64 squares of one slider and prints them as the Rust
+/// source (a `MagicEntry` array plus its table size) that gets pasted into
+/// `computed_boards.rs`.
 fn find_and_print_all_magics(
     deltas: &[(i8, i8); 4],
     blockers: &[Bitboard],
@@ -116,6 +151,10 @@ fn find_and_print_all_magics(
     );
 }
 
+/// Offline tool: regenerates and prints all rook and bishop magic tables.
+///
+/// Not used during play — the generated numbers already live as `const` arrays
+/// in `computed_boards.rs`. Pass `Some(seed)` to reproduce a known set.
 pub fn find_magics(magic_num_seed: Option<u64>) {
     let mut rng = Pcg64Mcg::from_rng(&mut rand::rng());
     if let Some(seed) = magic_num_seed {

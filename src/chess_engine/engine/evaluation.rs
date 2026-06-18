@@ -1,3 +1,19 @@
+//! Static evaluation: scoring a position without searching.
+//!
+//! The score combines **material** (fixed value per piece) with **piece-square
+//! tables** (PSTs) that reward each piece for standing on good squares. The
+//! king's table is *tapered*: a game phase is computed from the remaining
+//! non-pawn material and used to interpolate between a middlegame table (king
+//! tucked away) and an endgame table (king active), so the king's ideal square
+//! shifts smoothly as pieces come off.
+//!
+//! PSTs are written rank-8-first (array index `0` = `a8`), while board squares
+//! are indexed from `a1` = `0`, so white squares are flipped with `sq ^ 56`
+//! before indexing and black squares index directly (see `pst_index`).
+//!
+//! `evaluate` returns centipawns from the side-to-move's perspective:
+//! positive is good for whoever is to move.
+
 use crate::chess_engine::{
     board::{BLACK, WHITE},
     piece::Piece,
@@ -5,18 +21,29 @@ use crate::chess_engine::{
 
 use super::super::board::Board;
 
+/// Material value of a pawn, in centipawns.
 const PAWN_VALUE: i32 = 100;
+/// Material value of a knight, in centipawns.
 const KNIGHT_VALUE: i32 = 320;
+/// Material value of a bishop, in centipawns.
 const BISHOP_VALUE: i32 = 330;
+/// Material value of a rook, in centipawns.
 const ROOK_VALUE: i32 = 500;
+/// Material value of a queen, in centipawns.
 const QUEEN_VALUE: i32 = 900;
 
 // --- Game Phase Increments ---
 // Used to determine if we are in opening/middlegame vs endgame
+/// Phase weight contributed by each knight.
 const KNIGHT_PHASE: i32 = 1;
+/// Phase weight contributed by each bishop.
 const BISHOP_PHASE: i32 = 1;
+/// Phase weight contributed by each rook.
 const ROOK_PHASE: i32 = 2;
+/// Phase weight contributed by each queen.
 const QUEEN_PHASE: i32 = 4;
+/// Total phase with all pieces on the board; the king PST interpolates between
+/// middlegame (`phase == TOTAL_PHASE`) and endgame (`phase == 0`).
 const TOTAL_PHASE: i32 =
     (KNIGHT_PHASE * 4) + (BISHOP_PHASE * 4) + (ROOK_PHASE * 4) + (QUEEN_PHASE * 2);
 
@@ -37,36 +64,43 @@ const TOTAL_PHASE: i32 =
 // Rank 2           : 5,  5, 10, 25, 25, 10,  5,  5
 // Rank 1           : 0,  0,  0,  0,  0,  0,  0,  0
 
+/// Pawn piece-square table (rank-8-first; see the [module docs](self)).
 const PAWN_PST: [i32; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5,
     10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20,
     -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
+/// Knight piece-square table (rank-8-first).
 const KNIGHT_PST: [i32; 64] = [
     -50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10,
     0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10,
     5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50,
 ];
 
+/// Bishop piece-square table (rank-8-first).
 const BISHOP_PST: [i32; 64] = [
     -20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 10, 10, 5, 0,
     -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10,
     -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20,
 ];
 
+/// Rook piece-square table (rank-8-first).
 const ROOK_PST: [i32; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0,
     0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0,
     0, 5, 5, 0, 0, 0,
 ];
 
+/// Queen piece-square table (rank-8-first).
 const QUEEN_PST: [i32; 64] = [
     -20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10,
     -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0,
     0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20,
 ];
 
+/// King piece-square table for the middlegame (rank-8-first); blended with
+/// [`KING_PST_EG`] by game phase.
 const KING_PST_MG: [i32; 64] = [
     // Middlegame
     -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40,
@@ -75,6 +109,8 @@ const KING_PST_MG: [i32; 64] = [
     10, 30, 20,
 ];
 
+/// King piece-square table for the endgame (rank-8-first); blended with
+/// [`KING_PST_MG`] by game phase.
 const KING_PST_EG: [i32; 64] = [
     // Endgame
     -50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30,
@@ -83,9 +119,10 @@ const KING_PST_EG: [i32; 64] = [
     -30, -50,
 ];
 
-// PSTs are written with rank 8 as the first row, so index 0 of the array is a8.
-// Board squares are indexed from a1 (0), so white squares must be flipped
-// vertically (sq ^ 56) before indexing; black squares index the table directly.
+/// Maps a board square (`a1` = 0) to its index into a rank-8-first PST array.
+///
+/// White squares are flipped vertically (`sq ^ 56`) so they read the table from
+/// White's perspective; black squares index it directly.
 fn pst_index(square: usize, is_white: bool) -> usize {
     if is_white {
         square ^ 56
@@ -94,10 +131,14 @@ fn pst_index(square: usize, is_white: bool) -> usize {
     }
 }
 
-/// Main evaluation function.
-/// Returns a score in centipawns from the perspective of the current player.
-/// Positive score means the current player is winning.
-/// Negative score means the opponent is winning.
+/// Statically evaluates `board`, returning a centipawn score from the
+/// perspective of the side to move (positive = better for the mover).
+///
+/// Sums material and piece-square bonuses for every non-king piece, then adds
+/// the tapered king score (a phase-weighted blend of [`KING_PST_MG`] and
+/// [`KING_PST_EG`]). The result is negated for Black so it is always reported
+/// from the mover's point of view. The starting position is symmetric, so it
+/// evaluates to `0`.
 pub(crate) fn evaluate(board: &Board) -> i32 {
     // --- Calculate final tapered score for KINGS ---
 
@@ -188,5 +229,29 @@ pub(crate) fn evaluate(board: &Board) -> i32 {
         total_score
     } else {
         -total_score
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::evaluate;
+    use crate::chess_engine::board::Board;
+
+    #[test]
+    fn start_position_is_balanced() {
+        // the opening position is mirror-symmetric, so neither side is ahead
+        let board = Board::new_start_pos().unwrap();
+        assert_eq!(evaluate(&board), 0);
+    }
+
+    #[test]
+    fn extra_material_favours_the_mover() {
+        // White has an extra queen and it is White to move.
+        let white = Board::from_fen("4k3/8/8/8/8/8/8/3QK3 w - - 0 1").unwrap();
+        assert!(evaluate(&white) > 0);
+        // Same position, Black to move: the score is reported from Black's
+        // (losing) perspective, so it flips sign.
+        let black = Board::from_fen("4k3/8/8/8/8/8/8/3QK3 b - - 0 1").unwrap();
+        assert!(evaluate(&black) < 0);
     }
 }

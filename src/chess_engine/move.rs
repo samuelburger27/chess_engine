@@ -1,3 +1,32 @@
+//! A [`Move`] packs an origin square, destination square, promotion choice, and
+//! special-move flag into a single 16-bit value.
+//!
+//! # Bit layout
+//!
+//! | Bits  | Meaning |
+//! |-------|---------|
+//! | 0–5   | destination square (`0..64`) |
+//! | 6–11  | origin square (`0..64`) |
+//! | 12–13 | promotion piece ([`PROMOTE_TO_KNIGHT`] … [`PROMOTE_TO_QUEEN`]) |
+//! | 14–15 | special-move type ([`NORMAL_MOVE`], [`EN_PASSANT`], [`CASTLING`], [`PROMOTION`]) |
+//!
+//! The promotion bits are only meaningful when the special-move type is
+//! [`PROMOTION`]; for every other move they default to "queen" and are ignored.
+//! Constructors do **not** bounds-check squares — they assume callers pass
+//! valid [`Position`]s (which are themselves `0..64`).
+//!
+//! # Examples
+//!
+//! ```
+//! use chess_engine::chess_engine::r#move::Move;
+//! use chess_engine::chess_engine::position::Position;
+//!
+//! let m = Move::new_default(Position::new(12), Position::new(28)); // e2 -> e4
+//! assert_eq!(m.get_origin(), Position::new(12));
+//! assert_eq!(m.get_dest(), Position::new(28));
+//! assert_eq!(m.to_string(), "e2e4");
+//! ```
+
 use std::fmt::Debug;
 
 use super::position::Position;
@@ -10,32 +39,40 @@ use crate::chess_engine::{
     },
 };
 
+/// The kind of a move, decoded from a [`Move`]'s special-move bits.
 #[derive(PartialEq, Debug, Clone)]
 pub enum SpecialMove {
+    /// A pawn reaching the last rank; the promotion bits select the new piece.
     Promotion,
+    /// A pawn capturing en passant.
     EnPassant,
+    /// A king/rook castling move (encoded as the king's two-square step).
     Castle,
+    /// Any ordinary move or capture.
     NormalMove,
 }
 
-// 16-bit unsigned integer to represent a move
-// bit 0-5: to square (0-63)
-// bit 6-11: from square (0-63)
-// bit 12-13: promotion piece type (knight, bishop, rook, queen)
-// bit 14-15: special move (promotion, en passant, castling)
+/// A chess move encoded in 16 bits. See the [module documentation](self) for
+/// the bit layout.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Move(u16);
 
-// promotions
+/// Promotion-bit value selecting a knight (set in bits 12–13).
 pub const PROMOTE_TO_KNIGHT: u16 = 0b01 << 12;
+/// Promotion-bit value selecting a bishop (set in bits 12–13).
 pub const PROMOTE_TO_BISHOP: u16 = 0b10 << 12;
+/// Promotion-bit value selecting a rook (set in bits 12–13).
 pub const PROMOTE_TO_ROOK: u16 = 0b11 << 12;
+/// Promotion-bit value selecting a queen (set in bits 12–13); also the default.
 pub const PROMOTE_TO_QUEEN: u16 = 0b00 << 12;
 
-// special moves
+/// Special-move flag for an ordinary move or capture (bits 14–15).
 pub const NORMAL_MOVE: u16 = 0b00 << 14;
+/// Special-move flag for an en-passant capture (bits 14–15).
 pub const EN_PASSANT: u16 = 0b01 << 14;
+/// Special-move flag for castling (bits 14–15).
 pub const CASTLING: u16 = 0b10 << 14;
+/// Special-move flag for a promotion (bits 14–15).
 pub const PROMOTION: u16 = 0b11 << 14;
 
 // default move (promote to queen, no special move)
@@ -44,28 +81,41 @@ const DEFAULT_MOVE: u16 = PROMOTE_TO_QUEEN | NORMAL_MOVE;
 // TODO refactor
 
 impl Move {
+    /// Wraps a raw 16-bit encoding without validation.
     pub fn make_raw(data: u16) -> Move {
         Move(data)
     }
 
+    /// Returns the raw 16-bit encoding.
     pub fn get_raw(&self) -> u16 {
         self.0
     }
 
+    /// Returns the destination square (bits 0–5).
     pub fn get_dest(&self) -> Position {
         let mask = 0b0000000000111111u16;
         return Position::new((mask & self.0) as usize);
     }
 
+    /// Returns the origin square (bits 6–11).
     pub fn get_origin(&self) -> Position {
         let mask = 0b0000_1111_1100_0000u16;
         return Position::new(((mask & self.0) >> 6) as usize);
     }
 
+    /// Returns the `(origin, destination)` pair.
     pub fn get_org_and_dest(&self) -> (Position, Position) {
         (self.get_origin(), self.get_dest())
     }
 
+    /// Decodes the special-move type (bits 14–15).
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::r#move::{Move, SpecialMove};
+    /// use chess_engine::chess_engine::position::Position;
+    /// let m = Move::new_default(Position::new(12), Position::new(28));
+    /// assert_eq!(m.get_special_move(), SpecialMove::NormalMove);
+    /// ```
     pub fn get_special_move(&self) -> SpecialMove {
         let mask = 0b1100000000000000u16;
         match self.0 & mask {
@@ -76,6 +126,9 @@ impl Move {
         }
     }
 
+    /// Decodes the promotion piece (bits 12–13). Only meaningful when
+    /// [`get_special_move`](Self::get_special_move) is [`SpecialMove::Promotion`];
+    /// otherwise returns [`Piece::Queen`] (the default bit pattern).
     pub fn get_promotion(&self) -> Piece {
         let mask: u16 = 0b0011000000000000u16;
         match self.0 & mask {
@@ -91,13 +144,24 @@ impl Move {
         let dest_square = usize::from(destination) as u16;
         dest_square | ((origin_square & 0b00111111) << 6)
     }
-    // default move, no special move
+
+    /// Builds an ordinary move (no special flag) from `origin` to `destination`.
     pub fn new_default(origin: Position, destination: Position) -> Self {
         let mask = Self::create_move_mask(origin, destination);
         Move(mask | DEFAULT_MOVE)
     }
 
-    // return all possible promotions
+    /// Builds the four promotion moves (knight, bishop, rook, queen) for a pawn
+    /// advancing from `origin` to `destination`.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::r#move::Move;
+    /// use chess_engine::chess_engine::position::Position;
+    /// // e7 (52) -> e8 (60)
+    /// let promos = Move::new_promote(Position::new(52), Position::new(60));
+    /// let strings: Vec<String> = promos.iter().map(|m| m.to_string()).collect();
+    /// assert_eq!(strings, ["e7e8n", "e7e8b", "e7e8r", "e7e8q"]);
+    /// ```
     pub fn new_promote(origin: Position, destination: Position) -> [Self; 4] {
         let mask: u16 = Move::create_move_mask(origin, destination) | PROMOTION;
         [
@@ -108,11 +172,16 @@ impl Move {
         ]
     }
 
+    /// Builds a move from `origin` to `destination` carrying the given `special`
+    /// flag (one of [`NORMAL_MOVE`], [`EN_PASSANT`], [`CASTLING`], [`PROMOTION`],
+    /// optionally OR-ed with a promotion-piece value).
     pub fn new_special(origin: Position, destination: Position, special: u16) -> Self {
         let mask = Self::create_move_mask(origin, destination) | special;
         Move(mask)
     }
 
+    /// Builds the castling move for `turn` on the given side, encoded as the
+    /// king's two-square step (e.g. white king-side is `e1`→`g1`).
     pub fn new_castle(king_side: bool, turn: Turn) -> Self {
         if turn == WHITE {
             if king_side {
@@ -127,6 +196,9 @@ impl Move {
     }
 }
 
+/// Formats the move in long algebraic / UCI notation: origin and destination
+/// squares, with the promotion piece letter appended for promotions (e.g.
+/// `"e2e4"`, `"e7e8q"`).
 impl ToString for Move {
     fn to_string(&self) -> String {
         let mut result =
@@ -138,6 +210,8 @@ impl ToString for Move {
     }
 }
 
+/// Formats every decoded field (raw bits, origin, destination, special-move
+/// type, promotion piece) for debugging.
 impl Debug for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let origin = self.get_origin();
