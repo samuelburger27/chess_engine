@@ -46,11 +46,12 @@ impl MagicEntry {
     /// // no blockers hashes to 0 regardless of the magic
     /// assert_eq!(entry.magic_index(Bitboard::new()), 0);
     /// ```
+    #[must_use] 
     pub fn magic_index(&self, blockers: Bitboard) -> usize {
         let blockers = blockers & self.mask;
         let hash = blockers.0.wrapping_mul(self.magic);
-        let index = (hash >> self.shift) as usize;
-        index
+        
+        (hash >> self.shift) as usize
     }
 }
 
@@ -127,8 +128,7 @@ fn find_and_print_all_magics(
 ) {
     println!("#[rustfmt::skip]");
     println!(
-        "pub const {}_MAGICS: &[MagicEntry; MAX_POS] = &[",
-        slider_name
+        "pub const {slider_name}_MAGICS: &[MagicEntry; MAX_POS] = &["
     );
     let mut attack_table: Vec<Bitboard> = Vec::new();
     let mut total_table_size = 0;
@@ -146,8 +146,7 @@ fn find_and_print_all_magics(
     }
     println!("];");
     println!(
-        "pub const {}_TABLE_SIZE: usize = {};",
-        slider_name, total_table_size
+        "pub const {slider_name}_TABLE_SIZE: usize = {total_table_size};"
     );
 }
 

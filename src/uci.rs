@@ -73,7 +73,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
         let line = line?;
-        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.is_empty() {
             continue;
         }
@@ -90,7 +90,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
                 state.stop_search();
                 match parse_position(&parts) {
                     Ok(board) => state.board = board,
-                    Err(err) => println!("info string error: {}", err),
+                    Err(err) => println!("info string error: {err}"),
                 }
             }
             "go" => handle_go(&parts, &mut state),
@@ -108,8 +108,8 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Sends the `id name`/`id author`/`uciok` handshake in response to `uci`.
 fn print_identity() {
-    println!("id name {}", ENGINE_NAME);
-    println!("id author {}", ENGINE_AUTHOR);
+    println!("id name {ENGINE_NAME}");
+    println!("id author {ENGINE_AUTHOR}");
     println!("uciok");
 }
 
@@ -161,7 +161,7 @@ fn parse_go_limits(parts: &[&str], board: &Board) -> SearchLimits {
                     continue;
                 };
                 match token {
-                    "depth" => depth = Some(value.min(u8::MAX as u64) as u8),
+                    "depth" => depth = Some(value.min(u64::from(u8::MAX)) as u8),
                     "movetime" => movetime = Some(value),
                     "wtime" => wtime = Some(value),
                     "btime" => btime = Some(value),
@@ -238,13 +238,13 @@ pub fn parse_position(parts: &[&str]) -> Result<Board, String> {
             }
             Board::from_fen(&fen_fields.join(" "))?
         }
-        other => return Err(format!("invalid position type: {}", other)),
+        other => return Err(format!("invalid position type: {other}")),
     };
 
     if let Some(index) = moves_index {
         for str_move in &parts[index + 1..] {
             if !board.play_string_move(str_move) {
-                return Err(format!("couldn't play move: {}", str_move));
+                return Err(format!("couldn't play move: {str_move}"));
             }
         }
     }

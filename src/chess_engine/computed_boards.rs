@@ -88,10 +88,10 @@ const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Pos
                 moves[square].0 |= ray.bitboard().0;
                 ray = shifted;
             }
-            delt_i += 1
+            delt_i += 1;
         }
         moves[square].0 &= !pos.bitboard().0;
-        square += 1
+        square += 1;
     }
     moves
 }

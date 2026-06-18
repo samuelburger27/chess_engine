@@ -118,6 +118,7 @@ impl Board {
     /// Builds a board from explicit piece bitboards and state, then derives the
     /// aggregate boards and the initial Zobrist hash. The twelve `piece_boards`
     /// must follow the `get_bb_index` layout.
+    #[must_use] 
     pub fn new_from_bitboards(
         piece_boards: [Bitboard; PLAYER_COUNT * PIECE_COUNT],
         turn: Turn,
@@ -159,7 +160,7 @@ impl Board {
     }
 
     fn compute_initial_zobrist(&mut self) {
-        self.zobrist_key = ZOBRIST_TABLE.hash_position(&self);
+        self.zobrist_key = ZOBRIST_TABLE.hash_position(self);
     }
 
     /// Returns `true` when neither side has enough material to deliver mate:
@@ -174,6 +175,7 @@ impl Board {
     /// // the opening position has plenty of material
     /// assert!(!Board::new_start_pos().unwrap().is_insufficient_material());
     /// ```
+    #[must_use] 
     pub fn is_insufficient_material(&self) -> bool {
         let pawns = self.get_piece_bitboard(Piece::Pawn, WHITE)
             | self.get_piece_bitboard(Piece::Pawn, BLACK);
@@ -259,7 +261,7 @@ impl Board {
     /// cheap to maintain incrementally.
     pub(crate) fn xor_piece_from_zobrist(&mut self, turn: Turn, piece: Piece, pos: Position) {
         self.zobrist_key ^=
-            ZOBRIST_TABLE.piece_square[turn as usize][piece as usize][pos.as_usize()];
+            ZOBRIST_TABLE.piece_square[usize::from(turn)][piece as usize][pos.as_usize()];
     }
 
     /// Toggles the en-passant-file contribution to the Zobrist hash (a no-op
@@ -299,6 +301,7 @@ impl Board {
     }
 
     /// Returns the bitboard of all `piece`s belonging to `turn`.
+    #[must_use] 
     pub fn get_piece_bitboard(&self, piece: Piece, turn: Turn) -> Bitboard {
         self.piece_boards[Board::get_bb_index(piece, turn)]
     }
@@ -306,7 +309,7 @@ impl Board {
     /// Maps a `(piece, colour)` pair to its index into
     /// [`piece_boards`](Board::piece_boards): `piece as usize + colour * 6`.
     pub(crate) fn get_bb_index(piece: Piece, turn: Turn) -> usize {
-        piece as usize + (turn as usize * PIECE_COUNT)
+        piece as usize + (usize::from(turn) * PIECE_COUNT)
     }
 
     /// Inverse of `get_bb_index`: recovers the
@@ -318,6 +321,7 @@ impl Board {
     /// Returns `true` if `attacking_player` attacks `tile`. Implemented by
     /// generating that side's pseudo-legal non-castle moves and checking whether
     /// any targets `tile`.
+    #[must_use] 
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {
         let moves = generate_pseudo_non_castle_moves(self, attacking_player);
         moves.iter().any(|m| m.get_dest() == tile)
@@ -334,6 +338,7 @@ impl Board {
     /// let board = Board::from_fen("4k3/8/8/8/8/8/8/r3K3 w - - 0 1").unwrap();
     /// assert!(board.in_check(WHITE));
     /// ```
+    #[must_use] 
     pub fn in_check(&self, turn: Turn) -> bool {
         let king_board = self.get_piece_bitboard(Piece::King, turn);
         let king_pos = Position::new(king_board.trailing_zeros());
@@ -363,6 +368,7 @@ impl Board {
 
     /// Returns the `(piece, colour)` occupying `pos`, or `None` if the square is
     /// empty.
+    #[must_use] 
     pub fn get_piece_at(&self, pos: Position) -> Option<(Piece, Turn)> {
         for (index, board) in self.piece_boards.iter().enumerate() {
             if board.is_square_set(pos.into()) {

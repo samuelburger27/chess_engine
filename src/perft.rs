@@ -57,5 +57,5 @@ pub fn perft_divide(board: &mut Board, depth: u32) {
         total_nodes += nodes;
     }
 
-    println!("Total nodes at depth {}: {}", depth, total_nodes);
+    println!("Total nodes at depth {depth}: {total_nodes}");
 }

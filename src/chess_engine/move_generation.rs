@@ -25,7 +25,7 @@ use crate::chess_engine::r#const::{
 use super::bitboard::Bitboard;
 use super::board::{Board, Turn, WHITE};
 use super::computed_boards::{KING_RING_MOVES, KNIGHT_MOVES};
-use super::masks::*;
+use super::masks::{RANK_2, RANK_7, RANK_8, RANK_1, NOT_H_FILE, NOT_A_FILE, W_QUEEN_CASTLE_EMPTY, B_QUEEN_CASTLE_EMPTY, W_KING_CASTLE_EMPTY, B_KING_CASTLE_EMPTY};
 use super::piece::Piece;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
@@ -50,7 +50,7 @@ impl Board {
         generate_pseudo_legal_moves(self, turn)
             .iter()
             .filter(|m| !self.would_check(**m))
-            .cloned()
+            .copied()
             .collect()
     }
 }
@@ -153,7 +153,7 @@ fn pawn_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let direction = if turn == WHITE { NORTH } else { SOUTH };
     let start_rank = if turn == WHITE { RANK_2 } else { RANK_7 };
     let promotion_rank = if turn == WHITE { RANK_8 } else { RANK_1 };
-    let enemy_pieces = board.player_boards[!turn as usize];
+    let enemy_pieces = board.player_boards[usize::from(!turn)];
 
     let pawns = board.get_piece_bitboard(Piece::Pawn, turn);
     let forward_moves = (pawns << direction) & board.empty_tiles;
@@ -227,7 +227,7 @@ fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
         let magic_entry = ROOK_MAGICS[origin];
         let moves_bb =
             ROOK_ATTACKS[magic_entry.magic_index(relevant_blockers) + magic_entry.offset];
-        let legal_bb = moves_bb & !board.player_boards[turn as usize];
+        let legal_bb = moves_bb & !board.player_boards[usize::from(turn)];
         extract_moves(legal_bb, origin, moves);
         rook_board.reset_lsb();
     }
@@ -239,7 +239,7 @@ fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
         let magic_entry = BISHOP_MAGICS[origin];
         let moves_bb =
             BISHOP_ATTACKS[magic_entry.magic_index(relevant_blockers) + magic_entry.offset];
-        let legal_bb = moves_bb & !board.player_boards[turn as usize];
+        let legal_bb = moves_bb & !board.player_boards[usize::from(turn)];
         extract_moves(legal_bb, origin, moves);
         bishop_board.reset_lsb();
     }
@@ -248,7 +248,7 @@ fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
 /// Generates knight moves for `turn` from the precomputed [`KNIGHT_MOVES`] table.
 fn knight_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let mut knight_board = board.get_piece_bitboard(Piece::Knight, turn);
-    let not_my_pieces = !board.player_boards[turn as usize];
+    let not_my_pieces = !board.player_boards[usize::from(turn)];
     while knight_board.is_not_empty() {
         let origin = knight_board.trailing_zeros();
         let moves_bb = KNIGHT_MOVES[origin] & not_my_pieces;
@@ -261,7 +261,7 @@ fn knight_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
 /// [`KING_RING_MOVES`] table (castling is handled by [`castle_moves`]).
 fn king_ring_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let king_board = board.get_piece_bitboard(Piece::King, turn);
-    let not_my_pieces = !board.player_boards[turn as usize];
+    let not_my_pieces = !board.player_boards[usize::from(turn)];
     let origin = king_board.trailing_zeros();
 
     let ring_moves = KING_RING_MOVES[origin] & not_my_pieces;
@@ -289,7 +289,7 @@ fn castle_moves(board: &mut Board, turn: Turn, moves: &mut Vec<Move>) {
             if !board.castle_rights.can_castle(turn, king_side) {
                 continue;
             }
-            let empty_space = empty_tiles[turn as usize];
+            let empty_space = empty_tiles[usize::from(turn)];
             // check that space between rook and king is empty
             if (empty_space & board.empty_tiles) == empty_space {
                 // tile between king and destination square is not under attack
@@ -298,7 +298,7 @@ fn castle_moves(board: &mut Board, turn: Turn, moves: &mut Vec<Move>) {
                 } else {
                     B_KING_START
                 };
-                let slide_tile = move_over_tile[turn as usize];
+                let slide_tile = move_over_tile[usize::from(turn)];
                 let slide_move = Move::new_default(king_pos, slide_tile);
                 if !board.would_check(slide_move) {
                     moves.push(Move::new_castle(king_side, turn));
