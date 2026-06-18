@@ -1,5 +1,5 @@
-use std::fmt::Debug;
 use crate::chess_engine::board::Turn;
+use std::fmt::Debug;
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct CastleRights {

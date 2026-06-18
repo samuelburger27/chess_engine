@@ -191,23 +191,22 @@ impl Bitboard {
     }
 
     pub fn print_bitboard(&self) {
-    println!("  +------------------------+");
-    for rank in (0..8).rev() {
-        print!("{} |", rank + 1);
-        for file in 0..8 {
-            let pos = Position::from_file_and_rank(file, rank);
-            if self.is_square_set(pos.as_usize()) {
-                print!(" X ");
-            } else {
-                print!(" . ");
+        println!("  +------------------------+");
+        for rank in (0..8).rev() {
+            print!("{} |", rank + 1);
+            for file in 0..8 {
+                let pos = Position::from_file_and_rank(file, rank);
+                if self.is_square_set(pos.as_usize()) {
+                    print!(" X ");
+                } else {
+                    print!(" . ");
+                }
             }
+            println!("|");
         }
-        println!("|");
+        println!("  +------------------------+");
+        println!("    a  b  c  d  e  f  g  h");
     }
-    println!("  +------------------------+");
-    println!("    a  b  c  d  e  f  g  h");
-}
-
 }
 
 // Iterator for set bits in a bitboard

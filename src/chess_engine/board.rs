@@ -152,7 +152,7 @@ impl Board {
         //     } else {
         //         self.game_state = GameState::Check;
         //     }
-        // } else if self.halfmove_count >= 50 || moves.is_empty() || self.is_insufficient_material() || 
+        // } else if self.halfmove_count >= 50 || moves.is_empty() || self.is_insufficient_material() ||
         // self.get_count_of_current_position_reached() >= 3 {
         //     self.game_state = GameState::Draw
         // }

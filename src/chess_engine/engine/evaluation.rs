@@ -23,8 +23,12 @@ const TOTAL_PHASE: i32 =
 // --- Piece-Square Tables (PSTs) ---
 // All tables are from White's perspective. Black's are flipped vertically.
 
-// Note on PST format: The array is indexed from A1 (0) to H8 (63).
-// The commented grid shows the board layout for clarity.
+// All tables are from White's perspective.
+//
+// Note on PST format: the tables below are written rank-8-first (index 0 = a8,
+// index 63 = h1). Board squares are indexed from a1 (0), so white squares must
+// be flipped vertically (sq ^ 56) before indexing; black squares index the
+// table directly.
 
 // Example for Pawn PST:
 // Rank 8 (Promotion): 0,  0,  0,  0,  0,  0,  0,  0
@@ -103,7 +107,7 @@ pub(crate) fn evaluate(board: &Board) -> i32 {
     // Iterate over piece types (Pawn to Queen), KING IS HANDLED SEPARATELY
     for (index, mut piece_board) in board.piece_boards.into_iter().enumerate() {
         let (piece, color) = Board::get_piece_information_index(index);
-        // kings handled separatly
+        // kings handled separately
         if piece == Piece::King {
             continue;
         }

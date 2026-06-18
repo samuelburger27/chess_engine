@@ -1,7 +1,11 @@
 use std::sync::LazyLock;
 
 use crate::chess_engine::{
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS}, magic_tables::MagicEntry, move_generation::get_sliding_moves, position::Position, zobrist::ZobristTable
+    magic_tables::MagicEntry,
+    move_generation::get_sliding_moves,
+    position::Position,
+    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
+    zobrist::ZobristTable,
 };
 
 use super::bitboard::Bitboard;
@@ -9,8 +13,10 @@ use super::bitboard::Bitboard;
 pub const KNIGHT_MOVES: [Bitboard; Position::MAX_POS] = generate_knight_moves();
 pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_moves();
 
-pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] = generate_slide_piece_blockers(&ROOK_DELTAS);
-pub const BISHOP_BLOCKERS: [Bitboard; Position::MAX_POS] = generate_slide_piece_blockers(&BISHOP_DELTAS);
+pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] =
+    generate_slide_piece_blockers(&ROOK_DELTAS);
+pub const BISHOP_BLOCKERS: [Bitboard; Position::MAX_POS] =
+    generate_slide_piece_blockers(&BISHOP_DELTAS);
 
 pub static BISHOP_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&BISHOP_DELTAS, BISHOP_MAGICS, BISHOP_TABLE_SIZE)
@@ -18,9 +24,7 @@ pub static BISHOP_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
 pub static ROOK_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&ROOK_DELTAS, ROOK_MAGICS, ROOK_TABLE_SIZE)
 });
-pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| {
-    ZobristTable::new(Some(1234))
-});
+pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| ZobristTable::new(Some(1234)));
 
 fn generate_slide_piece_attack_tables(
     slider_deltas: &[(i8, i8); 4],
