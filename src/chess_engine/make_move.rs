@@ -1,3 +1,19 @@
+//! Applying and undoing moves on a [`Board`].
+//!
+//! [`Board::commit_verified_move`] mutates the position in place and is the
+//! single point where all four [`SpecialMove`] cases (normal, promotion,
+//! castle, en passant) are handled, along with the bookkeeping that hangs off a
+//! move: captures, en-passant square, castling rights, the half-move/full-move
+//! clocks, and the side to move. Before touching anything it pushes a
+//! [`StateDelta`] capturing the pre-move state — including the full Zobrist hash
+//! — so [`unmake_move`](Board::unmake_move) can restore the position exactly.
+//!
+//! The Zobrist hash is kept up to date incrementally: each
+//! [`add_piece`](Board::add_piece)/[`remove_piece`](Board::remove_piece) XORs the
+//! relevant table entry. `unmake_move` restores the stored hash wholesale rather
+//! than replaying those XORs. The unit tests at the bottom of this file assert
+//! the incremental hash always matches a full recompute.
+
 use crate::chess_engine::{
     bitboard::Bitboard,
     board::{Board, Turn, BLACK, WHITE},
@@ -13,6 +29,12 @@ use crate::chess_engine::{
 };
 
 impl Board {
+    /// Applies `move_` to the board, updating piece placement, the Zobrist hash,
+    /// castling rights, en-passant square, the move clocks, and the side to move,
+    /// and records a `StateDelta` so the move can be undone.
+    ///
+    /// The move must already be known to be legal (e.g. produced by
+    /// [`generate_moves`](Board::generate_moves)); it is not re-validated here.
     pub fn commit_verified_move(&mut self, move_: Move) {
         // commit move
         // move should be verified before
@@ -136,6 +158,8 @@ impl Board {
         self.update_game_result();
     }
 
+    /// After a rook is captured, revokes the opponent's castling right on that
+    /// rook's side if the rook is no longer on its starting square.
     fn captured_rook_remove_castle_rights(&mut self) {
         // capture rook, remove castle right
         let enemy_rooks = self.get_piece_bitboard(Piece::Rook, !self.turn);
@@ -157,6 +181,9 @@ impl Board {
         }
     }
 
+    /// Reverts the most recently committed move, restoring the board to its
+    /// previous state from the top [`StateDelta`] on the history stack. Does
+    /// nothing if no move has been made.
     pub(crate) fn unmake_move(&mut self) {
         let Some(move_delta) = self.history.pop() else {
             return;
@@ -218,6 +245,8 @@ impl Board {
         self.update_game_result();
     }
 
+    /// Finds the legal move matching `(origin, dest, promote)` and commits it,
+    /// returning whether such a move existed.
     fn make_input_move(&mut self, origin: Position, dest: Position, promote: Piece) -> bool {
         let moves = self.generate_moves(self.turn);
         for move_ in moves {
@@ -232,6 +261,20 @@ impl Board {
         return false;
     }
 
+    /// Parses a move in long algebraic / UCI notation (e.g. `"e2e4"`, or
+    /// `"e7e8q"` with a trailing promotion letter) and plays it if it is legal
+    /// in the current position. Returns `false` for malformed strings or illegal
+    /// moves, leaving the board unchanged.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::board::Board;
+    /// use chess_engine::chess_engine::utils::init_tables;
+    ///
+    /// init_tables();
+    /// let mut board = Board::new_start_pos().unwrap();
+    /// assert!(board.play_string_move("e2e4")); // legal opening move
+    /// assert!(!board.play_string_move("xyz")); // malformed input
+    /// ```
     pub fn play_string_move(&mut self, s_move: &str) -> bool {
         if s_move.len() != 4 && s_move.len() != 5 {
             return false;
@@ -254,6 +297,8 @@ impl Board {
         return self.make_input_move(origin, dest, promote);
     }
 
+    /// Returns the `(origin, destination)` squares of the rook involved in a
+    /// castle, inferred from the king's destination square `king_des`.
     fn get_castle_rook_origin_dest(turn: Turn, king_des: Position) -> (Position, Position) {
         // return dest and origin of a rook that is moved during castle
         let (file, _) = king_des.get_file_and_rank();

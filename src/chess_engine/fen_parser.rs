@@ -1,12 +1,45 @@
+//! [Forsyth–Edwards Notation][fen] parsing for [`Board`].
+//!
+//! A FEN string has six space-separated fields: piece placement (rank 8 first),
+//! side to move, castling rights, en-passant target, half-move clock, and
+//! full-move number. This parser requires all six fields to be present.
+//!
+//! [fen]: https://www.chessprogramming.org/Forsyth-Edwards_Notation
+
 use super::r#const::EMPTY_BIT_B;
 use crate::chess_engine::board::{Board, Turn, BLACK, PLAYER_COUNT, WHITE};
 use crate::chess_engine::castle_rights::CastleRights;
 use crate::chess_engine::piece::{Piece, PIECE_COUNT};
 use crate::chess_engine::position::Position;
 
+/// FEN of the standard starting position.
 pub const START_POS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 impl Board {
+    /// Parses a six-field FEN string into a [`Board`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` with a human-readable message if the string does not have
+    /// exactly six fields, has more than eight ranks, or contains an invalid
+    /// piece letter, side-to-move, castling character, en-passant square, or
+    /// move counter.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::board::{Board, BLACK, WHITE};
+    /// use chess_engine::chess_engine::piece::Piece;
+    /// use chess_engine::chess_engine::position::Position;
+    ///
+    /// // position after 1. e4
+    /// let board =
+    ///     Board::from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")
+    ///         .unwrap();
+    /// assert_eq!(board.turn, BLACK);
+    /// assert_eq!(board.get_piece_at(Position::new(28)), Some((Piece::Pawn, WHITE))); // e4
+    ///
+    /// // every field must be present
+    /// assert!(Board::from_fen("garbage").is_err());
+    /// ```
     pub fn from_fen(string: &str) -> Result<Board, String> {
         let mut piece_boards = [EMPTY_BIT_B; PIECE_COUNT * PLAYER_COUNT];
 
@@ -86,5 +119,40 @@ impl Board {
             full_move,
             castle,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chess_engine::board::{Board, BLACK, WHITE};
+    use crate::chess_engine::piece::Piece;
+    use crate::chess_engine::position::Position;
+
+    #[test]
+    fn start_pos_fen_places_pieces() {
+        let board = Board::new_start_pos().unwrap();
+        assert_eq!(board.turn, WHITE);
+        assert_eq!(board.fullmove_count, 1);
+        // back-rank corners hold rooks of the right colour
+        assert_eq!(board.get_piece_at(Position::new(0)), Some((Piece::Rook, WHITE))); // a1
+        assert_eq!(board.get_piece_at(Position::new(63)), Some((Piece::Rook, BLACK))); // h8
+        // the centre is empty
+        assert_eq!(board.get_piece_at(Position::new(28)), None); // e4
+    }
+
+    #[test]
+    fn parses_state_fields() {
+        let board =
+            Board::from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1").unwrap();
+        assert_eq!(board.turn, BLACK);
+        assert_eq!(board.halfmove_count, 0);
+        // e3 (square 20) is the recorded en-passant target
+        assert!(board.en_passant.is_square_set(20));
+    }
+
+    #[test]
+    fn rejects_malformed_fen() {
+        assert!(Board::from_fen("garbage").is_err());
+        assert!(Board::from_fen("8/8/8/8/8/8/8/8 x - - 0 1").is_err());
     }
 }

@@ -1,3 +1,13 @@
+//! Precomputed lookup tables that move generation reads from.
+//!
+//! The knight, king, and sliding-piece blocker masks are `const` arrays built
+//! at compile time. The sliding-piece *attack* tables and the shared
+//! [`ZobristTable`] are larger and built once on first use via [`LazyLock`];
+//! call [`init_tables`](super::utils::init_tables) at startup to force them
+//! eagerly. The magic multipliers used to index the attack tables are the
+//! `BISHOP_MAGICS`/`ROOK_MAGICS` arrays below (generated offline by
+//! [`find_magics`](super::magic_tables::find_magics)).
+
 use std::sync::LazyLock;
 
 use crate::chess_engine::{
@@ -10,22 +20,31 @@ use crate::chess_engine::{
 
 use super::bitboard::Bitboard;
 
+/// Knight destination squares, indexed by the knight's square.
 pub const KNIGHT_MOVES: [Bitboard; Position::MAX_POS] = generate_knight_moves();
+/// King one-step destination squares ("king ring"), indexed by the king's square.
 pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_moves();
 
+/// Relevant-blocker masks for a rook on each square (ray squares minus the edges).
 pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] =
     generate_slide_piece_blockers(&ROOK_DELTAS);
+/// Relevant-blocker masks for a bishop on each square.
 pub const BISHOP_BLOCKERS: [Bitboard; Position::MAX_POS] =
     generate_slide_piece_blockers(&BISHOP_DELTAS);
 
+/// Bishop attack table indexed by `BISHOP_MAGICS[sq].magic_index(blockers) + offset`.
 pub static BISHOP_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&BISHOP_DELTAS, BISHOP_MAGICS, BISHOP_TABLE_SIZE)
 });
+/// Rook attack table indexed by `ROOK_MAGICS[sq].magic_index(blockers) + offset`.
 pub static ROOK_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
     generate_slide_piece_attack_tables(&ROOK_DELTAS, ROOK_MAGICS, ROOK_TABLE_SIZE)
 });
+/// The single shared Zobrist table (fixed seed so hashes are reproducible).
 pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| ZobristTable::new(Some(1234)));
 
+/// Fills a slider's attack table: for every square, enumerates all blocker
+/// subsets (Carry-Rippler) and stores the reachable squares at the magic index.
 fn generate_slide_piece_attack_tables(
     slider_deltas: &[(i8, i8); 4],
     magics: &[MagicEntry; Position::MAX_POS],
@@ -53,6 +72,9 @@ fn generate_slide_piece_attack_tables(
     table
 }
 
+/// Builds the relevant-blocker mask for each square: the squares a slider's
+/// rays pass through, excluding the slider's own square (board edges are
+/// implicitly excluded because a ray's final square cannot block movement).
 const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Position::MAX_POS] {
     let mut moves = [EMPTY_BIT_B; Position::MAX_POS];
     let mut square = 0;
@@ -74,6 +96,8 @@ const fn generate_slide_piece_blockers(deltas: &[(i8, i8); 4]) -> [Bitboard; Pos
     moves
 }
 
+/// Builds, for each square, the bitboard of the up-to-eight adjacent squares a
+/// king can step to.
 const fn generate_king_ring_moves() -> [Bitboard; Position::MAX_POS] {
     let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
@@ -105,6 +129,8 @@ const fn generate_king_ring_moves() -> [Bitboard; Position::MAX_POS] {
     moves
 }
 
+/// Builds, for each square, the bitboard of the up-to-eight L-shaped squares a
+/// knight can jump to.
 const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
     let mut moves = [Bitboard(0); Position::MAX_POS];
     let mut square = 0;
@@ -140,6 +166,8 @@ const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
 }
 
 // pasted from find_all_magics
+/// Per-square magic parameters for bishops (see [`MagicEntry`]), generated
+/// offline and pasted in.
 #[rustfmt::skip]
 pub const BISHOP_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x0040201008040200), magic: 0x200204104C860080, shift: 58, offset: 0 },
@@ -207,7 +235,10 @@ pub const BISHOP_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x0020100804020000), magic: 0x008010D010810040, shift: 59, offset: 5152 },
     MagicEntry { mask: Bitboard(0x0040201008040200), magic: 0x1010101004802048, shift: 58, offset: 5184 },
 ];
+/// Number of entries in [`BISHOP_ATTACKS`] (sum of all per-square block sizes).
 pub const BISHOP_TABLE_SIZE: usize = 5248;
+/// Per-square magic parameters for rooks (see [`MagicEntry`]), generated offline
+/// and pasted in.
 #[rustfmt::skip]
 pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x000101010101017E), magic: 0x0080001140028420, shift: 52, offset: 0 },
@@ -275,4 +306,5 @@ pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
     MagicEntry { mask: Bitboard(0x3E40404040404000), magic: 0x100200210400C802, shift: 53, offset: 96256 },
     MagicEntry { mask: Bitboard(0x7E80808080808000), magic: 0x0028005484010022, shift: 52, offset: 98304 },
 ];
+/// Number of entries in [`ROOK_ATTACKS`] (sum of all per-square block sizes).
 pub const ROOK_TABLE_SIZE: usize = 102400;

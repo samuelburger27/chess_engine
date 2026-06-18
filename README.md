@@ -21,6 +21,17 @@ cargo build --release
 cargo run --release        # starts the engine, reads UCI from stdin
 ```
 
+## API Documentation
+
+The crate is documented with rustdoc (module overviews, every public item, and
+runnable examples). Build and open it with:
+
+```bash
+cargo doc --no-deps --open
+```
+
+The doctested examples double as tests; run them with `cargo test --doc`.
+
 ## UCI Commands
 
 | Command | Description |

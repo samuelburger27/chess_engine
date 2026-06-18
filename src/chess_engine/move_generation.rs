@@ -1,3 +1,19 @@
+//! Move generation: turning a [`Board`] into the list of moves available to a
+//! side.
+//!
+//! Generation is two-phase. First, *pseudo-legal* moves are produced cheaply —
+//! pawns by bit-shifting masks, knights and the king by table lookup, and
+//! sliding pieces via the [magic bitboard](super::magic_tables) attack tables —
+//! without regard for whether they leave the mover's king in check. Then
+//! [`Board::generate_moves`] filters those down to *legal* moves with
+//! [`Board::would_check`].
+//!
+//! Castle generation lives in its own path so that check detection (which asks
+//! whether the king passes through an attacked square) does not recurse back
+//! into castle generation; that is why
+//! [`generate_pseudo_non_castle_moves`] exists separately from
+//! [`generate_pseudo_legal_moves`].
+
 use crate::chess_engine::computed_boards::{
     BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS,
 };
@@ -16,6 +32,20 @@ use super::r#const::EMPTY_BIT_B;
 use super::r#move::{Move, EN_PASSANT};
 
 impl Board {
+    /// Returns every fully legal move for `turn` in this position.
+    ///
+    /// Pseudo-legal moves are generated and then filtered to remove any that
+    /// would leave `turn`'s own king in check.
+    ///
+    /// ```
+    /// use chess_engine::chess_engine::board::{Board, WHITE};
+    /// use chess_engine::chess_engine::utils::init_tables;
+    ///
+    /// init_tables();
+    /// let mut board = Board::new_start_pos().unwrap();
+    /// // twenty legal first moves: sixteen pawn pushes and four knight moves
+    /// assert_eq!(board.generate_moves(WHITE).len(), 20);
+    /// ```
     pub fn generate_moves(&mut self, turn: Turn) -> Vec<Move> {
         generate_pseudo_legal_moves(self, turn)
             .iter()
@@ -25,12 +55,16 @@ impl Board {
     }
 }
 
+/// Generates all pseudo-legal moves for `turn`, including castling. "Pseudo-legal"
+/// means the mover's king may be left in check — callers must filter those out.
 pub fn generate_pseudo_legal_moves(board: &mut Board, turn: Turn) -> Vec<Move> {
     let mut moves = generate_pseudo_non_castle_moves(board, turn);
     castle_moves(board, turn, &mut moves);
     moves
 }
 
+/// Generates pseudo-legal moves *excluding* castling. Used by attack/check
+/// detection, where including castling would recurse infinitely.
 pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> {
     // skip castle moves, used when checking for checks to avoid inf loop
     let mut moves = Vec::new();
@@ -41,6 +75,11 @@ pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> 
     moves
 }
 
+/// Walks the four `deltas` outward from `pos`, stopping each ray at the first
+/// `blockers` square (inclusive), and returns the union of reachable squares.
+///
+/// This is the slow, blocker-aware reference used when *building* the magic
+/// attack tables; runtime move generation reads those tables directly.
 pub(crate) fn get_sliding_moves(
     deltas: &[(i8, i8); 4],
     pos: Position,
@@ -61,6 +100,7 @@ pub(crate) fn get_sliding_moves(
     moves
 }
 
+/// Pushes one normal [`Move`] from `origin` to each set square in `bit_board`.
 fn extract_moves(mut bit_board: Bitboard, origin: usize, moves: &mut Vec<Move>) {
     while bit_board.is_not_empty() {
         let dest = bit_board.trailing_zeros();
@@ -74,6 +114,8 @@ fn extract_moves(mut bit_board: Bitboard, origin: usize, moves: &mut Vec<Move>) 
     }
 }
 
+/// Pushes one pawn [`Move`] per set destination square in `bit_board`,
+/// recovering each origin by subtracting `shift` from the destination index.
 fn extract_pawn_moves(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>) {
     // Extract moves from bitboard representation
     // and push them to the moves vector
@@ -90,6 +132,8 @@ fn extract_pawn_moves(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>)
     }
 }
 
+/// Like [`extract_pawn_moves`], but emits all four promotion moves per
+/// destination square (used for pawns reaching the last rank).
 fn extract_promotions(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>) {
     while bit_board.is_not_empty() {
         let dest = bit_board.trailing_zeros();
@@ -102,6 +146,9 @@ fn extract_promotions(mut bit_board: Bitboard, shift: i8, moves: &mut Vec<Move>)
     }
 }
 
+/// Generates all pawn moves for `turn`: single and double pushes, diagonal
+/// captures, en-passant captures, and promotions, computed with file-masked
+/// bit shifts.
 fn pawn_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let direction = if turn == WHITE { NORTH } else { SOUTH };
     let start_rank = if turn == WHITE { RANK_2 } else { RANK_7 };
@@ -167,6 +214,8 @@ fn pawn_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     extract_promotions(left_captures & promotion_rank, l_dir, moves);
 }
 
+/// Generates rook, bishop, and queen moves for `turn` (the queen contributes to
+/// both the rook-like and bishop-like rays) using the magic attack tables.
 fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let queen_board = board.get_piece_bitboard(Piece::Queen, turn);
     // add queen board
@@ -196,6 +245,7 @@ fn sliding_pieces_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     }
 }
 
+/// Generates knight moves for `turn` from the precomputed [`KNIGHT_MOVES`] table.
 fn knight_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let mut knight_board = board.get_piece_bitboard(Piece::Knight, turn);
     let not_my_pieces = !board.player_boards[turn as usize];
@@ -207,6 +257,8 @@ fn knight_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     }
 }
 
+/// Generates the king's one-square moves for `turn` from the precomputed
+/// [`KING_RING_MOVES`] table (castling is handled by [`castle_moves`]).
 fn king_ring_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     let king_board = board.get_piece_bitboard(Piece::King, turn);
     let not_my_pieces = !board.player_boards[turn as usize];
@@ -216,6 +268,9 @@ fn king_ring_moves(board: &Board, turn: Turn, moves: &mut Vec<Move>) {
     extract_moves(ring_moves, origin, moves);
 }
 
+/// Adds castling moves for `turn` when legal: the right is still held, the
+/// squares between king and rook are empty, the king is not in check, and it
+/// does not pass through an attacked square.
 fn castle_moves(board: &mut Board, turn: Turn, moves: &mut Vec<Move>) {
     let castle_data = [
         (
