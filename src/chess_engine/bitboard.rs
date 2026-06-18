@@ -54,6 +54,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert!(Bitboard::new().is_empty());
     /// ```
+    #[must_use] 
     pub const fn new() -> Self {
         Bitboard(0)
     }
@@ -64,6 +65,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0xFF).get_bits(), 0xFF);
     /// ```
+    #[must_use] 
     pub const fn from_u64(value: u64) -> Self {
         Bitboard(value)
     }
@@ -74,6 +76,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::full().count_bits(), 64);
     /// ```
+    #[must_use] 
     pub const fn full() -> Self {
         Bitboard(u64::MAX)
     }
@@ -110,6 +113,7 @@ impl Bitboard {
 
     /// Returns `true` if `square` is a member of the set (always `false` for
     /// out-of-range indices).
+    #[must_use] 
     pub fn is_square_set(&self, square: usize) -> bool {
         if square < 64 {
             (self.0 & (1 << square)) != 0
@@ -121,16 +125,19 @@ impl Bitboard {
     // Getters
 
     /// Returns the underlying `u64`.
+    #[must_use] 
     pub fn get_bits(&self) -> u64 {
         self.0
     }
 
     /// Returns `true` if no squares are set.
+    #[must_use] 
     pub const fn is_empty(&self) -> bool {
         self.0 == 0
     }
 
     /// Returns `true` if at least one square is set.
+    #[must_use] 
     pub const fn is_not_empty(&self) -> bool {
         self.0 != 0
     }
@@ -153,17 +160,20 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0b1111).count_bits(), 4);
     /// ```
+    #[must_use] 
     pub const fn count_bits(&self) -> u32 {
         self.0.count_ones()
     }
 
     /// Returns the number of leading zero bits (counting from the `h8` end).
+    #[must_use] 
     pub const fn leading_zeros(&self) -> u32 {
         self.0.leading_zeros()
     }
 
     /// Returns the number of trailing zero bits, i.e. the index of the
     /// lowest set square (`64` if the board is empty).
+    #[must_use] 
     pub const fn trailing_zeros(&self) -> usize {
         self.0.trailing_zeros() as usize
     }
@@ -176,6 +186,7 @@ impl Bitboard {
     /// assert_eq!(Bitboard::from_u64(0b1010).first_set_bit(), Some(1));
     /// assert_eq!(Bitboard::new().first_set_bit(), None);
     /// ```
+    #[must_use] 
     pub const fn first_set_bit(&self) -> Option<usize> {
         if self.0 == 0 {
             None
@@ -191,6 +202,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0b1010).last_set_bit(), Some(3));
     /// ```
+    #[must_use] 
     pub const fn last_set_bit(&self) -> Option<usize> {
         if self.0 == 0 {
             None
@@ -221,6 +233,7 @@ impl Bitboard {
 
     /// Returns a bitboard containing only the least-significant set square
     /// (empty if `self` is empty).
+    #[must_use] 
     pub const fn lsb(&self) -> Bitboard {
         if self.0 == 0 {
             Bitboard(0)
@@ -243,6 +256,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::file_mask(0).get_bits(), 0x0101_0101_0101_0101);
     /// ```
+    #[must_use] 
     pub const fn file_mask(file: usize) -> Bitboard {
         if file < 8 {
             Bitboard(0x0101010101010101 << file)
@@ -258,6 +272,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::rank_mask(0).get_bits(), 0xFF);
     /// ```
+    #[must_use] 
     pub const fn rank_mask(rank: usize) -> Bitboard {
         if rank < 8 {
             Bitboard(0xFF << (rank * 8))
@@ -267,11 +282,13 @@ impl Bitboard {
     }
 
     /// Returns the subset of `self` that lies on `file`.
+    #[must_use] 
     pub fn get_file(&self, file: usize) -> Bitboard {
         *self & Self::file_mask(file)
     }
 
     /// Returns the subset of `self` that lies on `rank`.
+    #[must_use] 
     pub fn get_rank(&self, rank: usize) -> Bitboard {
         *self & Self::rank_mask(rank)
     }
@@ -285,6 +302,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::square_from_coords(4, 3), Some(28)); // e4
     /// ```
+    #[must_use] 
     pub const fn square_from_coords(file: usize, rank: usize) -> Option<usize> {
         if file < 8 && rank < 8 {
             Some(rank * 8 + file)
@@ -300,6 +318,7 @@ impl Bitboard {
     /// use chess_engine::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::coords_from_square(28), Some((4, 3))); // e4
     /// ```
+    #[must_use] 
     pub const fn coords_from_square(square: usize) -> Option<(usize, usize)> {
         if square < 64 {
             Some((square % 8, square / 8))
@@ -316,6 +335,7 @@ impl Bitboard {
     /// let squares: Vec<usize> = Bitboard::from_u64(0b1010).iter_set_bits().collect();
     /// assert_eq!(squares, vec![1, 3]);
     /// ```
+    #[must_use] 
     pub fn iter_set_bits(&self) -> BitboardIterator {
         BitboardIterator { bitboard: *self }
     }
@@ -323,17 +343,20 @@ impl Bitboard {
     /// Reverses the bit order, mirroring the board horizontally (file `a` ↔ `h`)
     /// and vertically at the same time. See [`flip_vertical`](Self::flip_vertical)
     /// and [`rotate_180`](Self::rotate_180) for the individual transforms.
+    #[must_use] 
     pub const fn reverse(&self) -> Bitboard {
         Bitboard(self.0.reverse_bits())
     }
 
     /// Flips the board vertically by swapping ranks (`a1` ↔ `a8`); used to view
     /// a position from the other side's perspective.
+    #[must_use] 
     pub const fn flip_vertical(&self) -> Bitboard {
         Bitboard(self.0.swap_bytes())
     }
 
     /// Rotates the board 180° (the composition of a horizontal and a vertical flip).
+    #[must_use] 
     pub const fn rotate_180(&self) -> Bitboard {
         Bitboard(self.0.reverse_bits().swap_bytes())
     }

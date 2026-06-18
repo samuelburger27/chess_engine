@@ -43,7 +43,7 @@ impl Board {
     pub fn from_fen(string: &str) -> Result<Board, String> {
         let mut piece_boards = [EMPTY_BIT_B; PIECE_COUNT * PLAYER_COUNT];
 
-        let parts: Vec<&str> = string.trim().split_whitespace().collect();
+        let parts: Vec<&str> = string.split_whitespace().collect();
         if parts.len() != 6 {
             return Err("FEN must have 6 fields".to_string());
         }
@@ -86,7 +86,7 @@ impl Board {
                 'k' => castle_rights[2] = true,
                 'q' => castle_rights[3] = true,
                 '-' => (),
-                _ => return Err(format!("Invalid castle character: {}", ch)),
+                _ => return Err(format!("Invalid castle character: {ch}")),
             }
         }
         let castle = CastleRights::make(

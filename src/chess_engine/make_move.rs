@@ -112,7 +112,7 @@ impl Board {
                 if (origin.as_usize() as i8 - destination.as_usize() as i8).abs() == 2 * NORTH {
                     // middle between des and origin
                     let en_passant_pos =
-                        Position::new((origin.as_usize() + destination.as_usize()) / 2);
+                        Position::new(usize::midpoint(origin.as_usize(), destination.as_usize()));
                     self.en_passant.set_square(en_passant_pos.as_usize());
                     self.xor_en_pass_from_zobrist(self.en_passant);
                 }
@@ -258,7 +258,7 @@ impl Board {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// Parses a move in long algebraic / UCI notation (e.g. `"e2e4"`, or
@@ -294,7 +294,7 @@ impl Board {
         let (Ok(origin), Ok(dest)) = (Position::try_from(from_s), Position::try_from(to_s)) else {
             return false;
         };
-        return self.make_input_move(origin, dest, promote);
+        self.make_input_move(origin, dest, promote)
     }
 
     /// Returns the `(origin, destination)` squares of the rook involved in a
@@ -306,15 +306,14 @@ impl Board {
         if file == 2 {
             if turn == WHITE {
                 return (W_QUEEN_ROOK_START, W_QUEEN_START);
-            } else {
-                return (B_QUEEN_ROOK_START, B_QUEEN_START);
             }
+            return (B_QUEEN_ROOK_START, B_QUEEN_START);
         }
         // king side
         else if turn == WHITE {
             return (W_KING_ROOK_START, W_KING_SIDE_BISHOP_START);
         }
-        return (B_KING_ROOK_START, B_KING_SIDE_BISHOP_START);
+        (B_KING_ROOK_START, B_KING_SIDE_BISHOP_START)
     }
 }
 

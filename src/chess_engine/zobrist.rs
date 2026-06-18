@@ -76,7 +76,7 @@ impl ZobristTable {
         let mut hash: ZobristHash = 0;
         for pos in 0..Position::MAX_POS {
             if let Some((piece, color)) = board.get_piece_at(Position::new(pos)) {
-                hash ^= self.piece_square[color as usize][piece as usize][pos];
+                hash ^= self.piece_square[usize::from(color)][piece as usize][pos];
             }
         }
         if board.turn == WHITE {
@@ -91,7 +91,7 @@ impl ZobristTable {
 
         if board.en_passant.is_not_empty() {
             let (file, _) = Position::new(board.en_passant.trailing_zeros()).get_file_and_rank();
-            hash ^= self.en_passant_file[file]
+            hash ^= self.en_passant_file[file];
         }
 
         hash

@@ -49,6 +49,7 @@ pub struct SearchLimits {
 impl SearchLimits {
     /// Limits the search to a fixed depth (clamped to [`MAX_DEPTH`]) with no
     /// time limit.
+    #[must_use] 
     pub fn depth(depth: u8) -> Self {
         SearchLimits {
             depth: depth.min(MAX_DEPTH),
@@ -58,6 +59,7 @@ impl SearchLimits {
 
     /// An unbounded search (to [`MAX_DEPTH`], no deadline); stopped only via the
     /// stop flag.
+    #[must_use] 
     pub fn infinite() -> Self {
         SearchLimits {
             depth: MAX_DEPTH,
@@ -99,7 +101,7 @@ impl SearchContext<'_> {
     /// triggered.
     fn count_node_and_check_abort(&mut self) -> bool {
         self.nodes += 1;
-        if self.nodes % ABORT_CHECK_INTERVAL == 0 {
+        if self.nodes.is_multiple_of(ABORT_CHECK_INTERVAL) {
             if self.stop.load(Ordering::Relaxed) {
                 self.aborted = true;
             } else if let Some(deadline) = self.deadline {
@@ -127,6 +129,7 @@ impl SearchContext<'_> {
 /// assert_eq!(result.best_move.unwrap().to_string(), "a1a8");
 /// assert!(result.score >= MATE_THRESHOLD); // a forced mate was found
 /// ```
+#[must_use] 
 pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
     let stop = AtomicBool::new(false);
     search_position(&mut board.clone(), SearchLimits::depth(depth), &stop, false)
@@ -192,7 +195,7 @@ pub fn search_position(
 fn print_info(result: &SearchResult, start: Instant) {
     let elapsed = start.elapsed();
     let millis = elapsed.as_millis().max(1);
-    let nps = (result.nodes as u128 * 1000) / millis;
+    let nps = (u128::from(result.nodes) * 1000) / millis;
 
     let score = if result.score.abs() >= MATE_THRESHOLD {
         // moves (not plies) until mate, negative when we are getting mated
@@ -203,7 +206,7 @@ fn print_info(result: &SearchResult, start: Instant) {
         format!("cp {}", result.score)
     };
 
-    let pv: Vec<String> = result.pv.iter().map(|m| m.to_string()).collect();
+    let pv: Vec<String> = result.pv.iter().map(std::string::ToString::to_string).collect();
     println!(
         "info depth {} score {} nodes {} time {} nps {} pv {}",
         result.depth,
@@ -249,7 +252,7 @@ fn negamax(
     if moves.is_empty() {
         return if board.in_check(board.turn) {
             // mated: worse the closer to the root it happens
-            -(MATE_SCORE - ply as i32)
+            -(MATE_SCORE - i32::from(ply))
         } else {
             0 // stalemate
         };

@@ -34,6 +34,7 @@ impl Position {
     pub const ALL_POS: [Position; Position::MAX_POS] = Position::generate_all_pos();
 
     /// Builds the [`ALL_POS`](Self::ALL_POS) array at compile time.
+    #[must_use] 
     pub const fn generate_all_pos() -> [Position; Position::MAX_POS] {
         let mut result = [Position(0); Position::MAX_POS];
         let mut index = 0;
@@ -54,6 +55,7 @@ impl Position {
     /// use chess_engine::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).as_usize(), 28);
     /// ```
+    #[must_use] 
     pub const fn new(index: usize) -> Position {
         assert!(index < Position::MAX_POS, "Index must be between 0 and 63");
         Self(index)
@@ -70,6 +72,7 @@ impl Position {
     /// assert_eq!(Position::from_file_and_rank(0, 0).as_usize(), 0); // a1
     /// assert_eq!(Position::from_file_and_rank(7, 7).as_usize(), 63); // h8
     /// ```
+    #[must_use] 
     pub const fn from_file_and_rank(file: usize, rank: usize) -> Position {
         assert!(
             file < 8 && rank < 8,
@@ -84,10 +87,11 @@ impl Position {
     /// use chess_engine::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).get_file_and_rank(), (4, 3)); // e4
     /// ```
+    #[must_use] 
     pub fn get_file_and_rank(&self) -> (usize, usize) {
         let file = self.0 % 8;
         let rank = self.0 / 8;
-        return (file, rank);
+        (file, rank)
     }
 
     /// Returns the square reached by shifting `d_file` files and `d_rank` ranks,
@@ -99,6 +103,7 @@ impl Position {
     /// assert_eq!(e4.try_rank_file_offset(0, 1), Some(Position::new(36))); // e5
     /// assert_eq!(Position::new(0).try_rank_file_offset(-1, 0), None); // off the a-file
     /// ```
+    #[must_use] 
     pub const fn try_rank_file_offset(&self, d_file: i8, d_rank: i8) -> Option<Self> {
         let file = (self.0 % 8) as i8 + d_file;
         let rank = (self.0 / 8) as i8 + d_rank;
@@ -111,17 +116,19 @@ impl Position {
     /// Returns the square `offset` indices away, or `None` if the result falls
     /// outside `0..64`. Note that this does not respect file wrapping — use
     /// [`try_rank_file_offset`](Self::try_rank_file_offset) when edges matter.
+    #[must_use] 
     pub fn try_offset(&self, offset: i8) -> Option<Self> {
         let index = self.0 as i8 + offset;
-        if index >= 0 && index < 64 {
+        if (0..64).contains(&index) {
             return Some(Position(index as usize));
         }
         None
     }
 
     /// Returns the raw square index.
+    #[must_use] 
     pub const fn as_usize(&self) -> usize {
-        return self.0;
+        self.0
     }
 
     /// Returns a [`Bitboard`] with exactly this square set.
@@ -130,6 +137,7 @@ impl Position {
     /// use chess_engine::chess_engine::position::Position;
     /// assert!(Position::new(28).bitboard().is_square_set(28));
     /// ```
+    #[must_use] 
     pub const fn bitboard(&self) -> Bitboard {
         let mut board = EMPTY_BIT_B;
         board.set_square(self.as_usize());
@@ -142,6 +150,7 @@ impl Position {
     /// use chess_engine::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).algebraic_notation(), "e4");
     /// ```
+    #[must_use] 
     pub fn algebraic_notation(&self) -> String {
         let (file, rank) = self.get_file_and_rank();
         let file_str = match file {
@@ -158,7 +167,7 @@ impl Position {
         }
         .to_string();
 
-        return file_str + &(rank + 1).to_string();
+        file_str + &(rank + 1).to_string()
     }
 }
 
@@ -200,7 +209,7 @@ impl TryFrom<&str> for Position {
         if rank > 8 {
             return Err(());
         }
-        return Ok(Position::from_file_and_rank(file, (rank - 1) as usize));
+        Ok(Position::from_file_and_rank(file, (rank - 1) as usize))
     }
 }
 
