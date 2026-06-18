@@ -5,7 +5,7 @@ use crate::chess_engine::{
     position::Position,
     r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
 };
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_pcg::Pcg64Mcg;
 
 // inspired by https://analog-hors.github.io/site/magic-bitboards/
@@ -26,7 +26,6 @@ impl MagicEntry {
     }
 }
 
-
 // Given a sliding piece and a square, finds a magic number that
 // perfectly maps input blockers into its solution in a hash table
 fn find_magic(
@@ -41,7 +40,7 @@ fn find_magic(
     loop {
         // Magics require a low number of active bits, so we AND
         // by two more random values to cut down on the bits set.
-        let magic = rng.gen::<u64>() & rng.gen::<u64>() & rng.gen::<u64>();
+        let magic = rng.random::<u64>() & rng.random::<u64>() & rng.random::<u64>();
         let magic_entry = MagicEntry {
             mask,
             magic,
@@ -118,7 +117,7 @@ fn find_and_print_all_magics(
 }
 
 pub fn find_magics(magic_num_seed: Option<u64>) {
-    let mut rng = Pcg64Mcg::from_entropy();
+    let mut rng = Pcg64Mcg::from_rng(&mut rand::rng());
     if let Some(seed) = magic_num_seed {
         rng = Pcg64Mcg::seed_from_u64(seed);
     }

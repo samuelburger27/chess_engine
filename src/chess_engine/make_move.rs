@@ -330,7 +330,10 @@ mod tests {
             board.unmake_move();
             assert_incremental_hash_matches(&board);
         }
-        assert!(board == original, "unmake did not restore the original board");
+        assert!(
+            board == original,
+            "unmake did not restore the original board"
+        );
     }
 
     #[test]

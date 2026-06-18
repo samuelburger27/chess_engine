@@ -6,5 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.8"
-rand_pcg = "0.3"
+rand = "0.10"
+rand_pcg = "0.10"
+
+# Extra "pedantic" clippy lints, surfaced as warnings (visible locally and in CI,
+# but non-fatal) so they guide cleanups without blocking the build.
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+# Maximally-optimized release build, used by the CI perft-timing job.
+# `target-cpu=native` is supplied per-job via RUSTFLAGS so `cargo build --release`
+# stays portable. `panic = "abort"` is intentionally omitted because it breaks `cargo test`.
+[profile.release]
+lto = "fat"
+codegen-units = 1

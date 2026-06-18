@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Piece {
     Pawn = 0,
@@ -13,7 +12,7 @@ pub enum Piece {
 pub const PIECE_COUNT: usize = 6;
 
 impl Piece {
-    // used for evaluatio 
+    // used for evaluatio
     pub fn get_piece_value(&self) -> i32 {
         match self {
             Piece::Pawn => 200,
@@ -70,5 +69,4 @@ impl From<usize> for Piece {
             _ => Piece::None,
         }
     }
-    
 }
