@@ -33,9 +33,9 @@ pub fn perft(board: &mut Board, depth: u32) -> u64 {
     let moves = board.generate_moves(board.turn);
 
     for mv in moves {
-        let mut new_board = board.clone();
-        new_board.commit_verified_move(mv);
-        nodes += perft(&mut new_board, depth - 1);
+        board.commit_verified_move(mv);
+        nodes += perft(board, depth - 1);
+        board.unmake_move();
     }
 
     nodes
@@ -51,9 +51,9 @@ pub fn perft_divide(board: &mut Board, depth: u32) {
     let mut total_nodes = 0;
 
     for mv in moves {
-        let mut new_board = board.clone();
-        new_board.commit_verified_move(mv);
-        let nodes = perft(&mut new_board, depth - 1);
+        board.commit_verified_move(mv);
+        let nodes = perft(board, depth - 1);
+        board.unmake_move();
         println!("{mv}: {nodes}");
         total_nodes += nodes;
     }
