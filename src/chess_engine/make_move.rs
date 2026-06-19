@@ -155,7 +155,9 @@ impl Board {
         self.turn = !self.turn;
         self.zobrist_key ^= ZOBRIST_TABLE.white_to_move;
 
-        self.compute_bitboards();
+        // player_boards is maintained incrementally by add_piece/remove_piece;
+        // empty_tiles only needs the cheap derive once the edits have settled
+        self.refresh_empty_tiles();
         self.update_game_result();
     }
 
@@ -242,7 +244,9 @@ impl Board {
         // is exact, so restore it wholesale instead of replaying xors
         self.zobrist_key = move_delta.zobrist_hash;
 
-        self.compute_bitboards();
+        // player_boards stays in sync via add_piece/remove_piece; derive
+        // empty_tiles from it
+        self.refresh_empty_tiles();
         self.update_game_result();
     }
 
