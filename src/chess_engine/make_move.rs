@@ -333,7 +333,7 @@ mod tests {
 
     fn play_and_check(board: &mut Board, moves: &[&str]) {
         for mv in moves {
-            assert!(board.play_string_move(mv), "illegal move in test: {}", mv);
+            assert!(board.play_string_move(mv), "illegal move in test: {mv}");
             assert_incremental_hash_matches(board);
         }
     }
