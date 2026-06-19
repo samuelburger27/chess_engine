@@ -47,6 +47,10 @@ pub fn perft(board: &mut Board, depth: u32) -> u64 {
 /// Used to localise move-generation bugs by diffing against another engine
 /// (the UCI `go perft <n>` command calls this).
 pub fn perft_divide(board: &mut Board, depth: u32) {
+    if depth == 0 {
+        println!("Depth 0: 1 node");
+        return;
+    }
     let moves = board.generate_moves(board.turn);
     let mut total_nodes = 0;
 
