@@ -64,7 +64,7 @@ fn run_perft_tests() {
         },
     ];
 
-    for test in tests.iter() {
+    for test in &tests {
         if let Ok(mut board) = Board::from_fen(test.fen) {
             let result = perft(&mut board, test.depth);
             assert_eq!(
