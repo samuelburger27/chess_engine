@@ -354,6 +354,15 @@ impl Board {
     /// see [`tile_under_attack`](Self::tile_under_attack).
     #[must_use]
     pub fn is_square_attacked(&self, sq: usize, by: Turn) -> bool {
+        self.is_square_attacked_occ(sq, by, !self.empty_tiles)
+    }
+
+    /// Like [`is_square_attacked`](Self::is_square_attacked) but takes an explicit
+    /// `occupancy` for the sliding-piece rays. King-move legality passes the
+    /// occupancy with the moving king removed, so a slider's attack is seen to
+    /// pass through the square the king is vacating.
+    #[must_use]
+    pub fn is_square_attacked_occ(&self, sq: usize, by: Turn, occupancy: Bitboard) -> bool {
         // knights
         if (KNIGHT_MOVES[sq] & self.get_piece_bitboard(Piece::Knight, by)).is_not_empty() {
             return true;
@@ -370,12 +379,11 @@ impl Board {
         }
 
         let queens = self.get_piece_bitboard(Piece::Queen, by);
-        let occupied = !self.empty_tiles;
 
         // bishops / queens along diagonals
         let bishop_entry = BISHOP_MAGICS[sq];
         let bishop_attacks = BISHOP_ATTACKS
-            [bishop_entry.magic_index(occupied & BISHOP_BLOCKERS[sq]) + bishop_entry.offset];
+            [bishop_entry.magic_index(occupancy & BISHOP_BLOCKERS[sq]) + bishop_entry.offset];
         if (bishop_attacks & (self.get_piece_bitboard(Piece::Bishop, by) | queens)).is_not_empty() {
             return true;
         }
@@ -383,7 +391,7 @@ impl Board {
         // rooks / queens along ranks and files
         let rook_entry = ROOK_MAGICS[sq];
         let rook_attacks =
-            ROOK_ATTACKS[rook_entry.magic_index(occupied & ROOK_BLOCKERS[sq]) + rook_entry.offset];
+            ROOK_ATTACKS[rook_entry.magic_index(occupancy & ROOK_BLOCKERS[sq]) + rook_entry.offset];
         (rook_attacks & (self.get_piece_bitboard(Piece::Rook, by) | queens)).is_not_empty()
     }
 

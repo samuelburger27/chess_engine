@@ -24,6 +24,7 @@ use crate::chess_engine::r#const::{
 
 use super::bitboard::Bitboard;
 use super::board::{Board, Turn, WHITE};
+use super::computed_boards::{BETWEEN, BISHOP_RAYS, LINE, PAWN_ATTACKS, ROOK_RAYS};
 use super::computed_boards::{KING_RING_MOVES, KNIGHT_MOVES};
 use super::masks::{
     B_KING_CASTLE_EMPTY, B_QUEEN_CASTLE_EMPTY, NOT_A_FILE, NOT_H_FILE, RANK_1, RANK_2, RANK_7,
@@ -32,7 +33,7 @@ use super::masks::{
 use super::piece::Piece;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
-use super::r#move::{Move, EN_PASSANT};
+use super::r#move::{Move, SpecialMove, EN_PASSANT};
 
 impl Board {
     /// Returns every fully legal move for `turn` in this position.
@@ -50,12 +51,128 @@ impl Board {
     /// assert_eq!(board.generate_moves(WHITE).len(), 20);
     /// ```
     pub fn generate_moves(&mut self, turn: Turn) -> Vec<Move> {
-        // Filter the pseudo-legal moves in place rather than collecting into a
-        // second Vec.
+        // Generate pseudo-legal moves, then keep the legal ones. Instead of a
+        // make/unmake check per move, a check mask and a pinned-piece set are
+        // computed once for the position (see [`check_and_pin_masks`]); most
+        // moves are then verified with O(1) bitboard tests. Only the irregular
+        // king, castle, and en-passant moves need a per-move attack test.
         let mut moves = generate_pseudo_legal_moves(self, turn);
-        moves.retain(|m| !self.would_check(*m));
+        let king_sq = self.get_piece_bitboard(Piece::King, turn).trailing_zeros();
+        let masks = self.check_and_pin_masks(turn, king_sq);
+        moves.retain(|m| self.is_move_legal(*m, turn, king_sq, &masks));
         moves
     }
+
+    /// Decides whether a single pseudo-legal move is legal, given the
+    /// position's [`CheckPinMasks`] and the mover's `king_sq`.
+    fn is_move_legal(
+        &mut self,
+        move_: Move,
+        turn: Turn,
+        king_sq: usize,
+        masks: &CheckPinMasks,
+    ) -> bool {
+        // Castling and en passant have irregular geometry (a passed-over square,
+        // a captured pawn off the destination, the en-passant discovered-check
+        // edge case); fall back to the exact make/unmake test for those. Both
+        // are rare, so the cost is negligible.
+        let special = move_.get_special_move();
+        if special == SpecialMove::Castle || special == SpecialMove::EnPassant {
+            return !self.would_check(move_);
+        }
+
+        let (origin, dest) = move_.get_org_and_dest();
+        let (from, to) = (origin.as_usize(), dest.as_usize());
+
+        // King moves: legal iff the destination is not attacked once the king
+        // has vacated its square (so it cannot slide along a checking ray).
+        if from == king_sq {
+            let occ_without_king = !self.empty_tiles ^ origin.bitboard();
+            return !self.is_square_attacked_occ(to, !turn, occ_without_king);
+        }
+
+        // In double check only the king may move.
+        if masks.num_checkers >= 2 {
+            return false;
+        }
+        // The move must resolve any check (check_mask is the full board when not
+        // in check), capturing the checker or blocking the checking ray.
+        if !masks.check_mask.is_square_set(to) {
+            return false;
+        }
+        // A pinned piece may only move along the line through the king and
+        // itself (toward the king or toward/onto the pinning piece).
+        if masks.pinned.is_square_set(from) && !LINE[king_sq][from].is_square_set(to) {
+            return false;
+        }
+        true
+    }
+
+    /// Computes, for `turn`'s king on `king_sq`, the squares a non-king piece may
+    /// move to in order to deal with check (`check_mask`), how many pieces give
+    /// check (`num_checkers`), and which of `turn`'s pieces are pinned to the
+    /// king (`pinned`). When the king is not in check, `check_mask` is the full
+    /// board so it constrains nothing.
+    fn check_and_pin_masks(&self, turn: Turn, king_sq: usize) -> CheckPinMasks {
+        let enemy = !turn;
+        let occupied = !self.empty_tiles;
+        let own_pieces = self.player_boards[usize::from(turn)];
+
+        let their_rooks_queens = self.get_piece_bitboard(Piece::Rook, enemy)
+            | self.get_piece_bitboard(Piece::Queen, enemy);
+        let their_bishops_queens = self.get_piece_bitboard(Piece::Bishop, enemy)
+            | self.get_piece_bitboard(Piece::Queen, enemy);
+
+        // Contact and jumping checkers (knights and pawns) cannot be blocked,
+        // only captured, so the mask is just their square.
+        let mut checkers = KNIGHT_MOVES[king_sq] & self.get_piece_bitboard(Piece::Knight, enemy);
+        checkers |=
+            PAWN_ATTACKS[usize::from(turn)][king_sq] & self.get_piece_bitboard(Piece::Pawn, enemy);
+        let mut check_mask = checkers;
+        let mut pinned = Bitboard::new();
+
+        // Enemy sliders that lie on a ray from the king either give a (blockable)
+        // check or, with exactly one friendly piece in the way, create a pin.
+        let mut snipers = (ROOK_RAYS[king_sq] & their_rooks_queens)
+            | (BISHOP_RAYS[king_sq] & their_bishops_queens);
+        while snipers.is_not_empty() {
+            let sniper = snipers.trailing_zeros();
+            let between = BETWEEN[king_sq][sniper];
+            let blockers = between & occupied;
+            if blockers.is_empty() {
+                // direct check: the ray and the sniper itself are the targets
+                checkers.set_square(sniper);
+                check_mask |= between;
+                check_mask.set_square(sniper);
+            } else if blockers.count_bits() == 1 && (blockers & own_pieces).is_not_empty() {
+                // exactly one of our pieces shields the king: it is pinned
+                pinned |= blockers;
+            }
+            snipers.reset_lsb();
+        }
+
+        let num_checkers = checkers.count_bits();
+        if num_checkers == 0 {
+            check_mask = Bitboard::full();
+        }
+        CheckPinMasks {
+            check_mask,
+            pinned,
+            num_checkers,
+        }
+    }
+}
+
+/// Per-position masks that turn legality into O(1) bitboard tests during move
+/// filtering. Produced by [`Board::check_and_pin_masks`].
+struct CheckPinMasks {
+    /// Squares a non-king piece may move to in order to end the check; the full
+    /// board when the king is not in check.
+    check_mask: Bitboard,
+    /// `turn`'s pieces that are pinned against their king.
+    pinned: Bitboard,
+    /// Number of enemy pieces giving check (0, 1, or 2).
+    num_checkers: u32,
 }
 
 /// Generates all pseudo-legal moves for `turn`, including castling. "Pseudo-legal"

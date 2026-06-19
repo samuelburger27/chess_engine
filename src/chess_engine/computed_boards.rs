@@ -30,6 +30,23 @@ pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_mo
 /// `square`, which is what attack detection needs.
 pub const PAWN_ATTACKS: [[Bitboard; Position::MAX_POS]; 2] = generate_pawn_attacks();
 
+/// All squares sharing a rank or file with the indexed square (the square itself
+/// excluded). Used to find enemy rooks/queens aligned with the king.
+pub const ROOK_RAYS: [Bitboard; Position::MAX_POS] = generate_rook_rays();
+/// All squares on the two diagonals through the indexed square (the square
+/// itself excluded). Used to find enemy bishops/queens aligned with the king.
+pub const BISHOP_RAYS: [Bitboard; Position::MAX_POS] = generate_bishop_rays();
+/// `BETWEEN[a][b]` is the set of squares strictly between `a` and `b` when they
+/// share a rank, file, or diagonal (both endpoints excluded); empty otherwise.
+///
+/// `static` rather than `const` because the table is large (one instance, not
+/// inlined at each use).
+pub static BETWEEN: [[Bitboard; Position::MAX_POS]; Position::MAX_POS] = generate_between();
+/// `LINE[a][b]` is the full rank, file, or diagonal passing through `a` and `b`
+/// (extended to the board edges, both endpoints included) when they are aligned;
+/// empty otherwise. Used to constrain a pinned piece to its pin ray.
+pub static LINE: [[Bitboard; Position::MAX_POS]; Position::MAX_POS] = generate_line();
+
 /// Relevant-blocker masks for a rook on each square (ray squares minus the edges).
 pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] =
     generate_slide_piece_blockers(&ROOK_DELTAS);
@@ -193,7 +210,8 @@ const fn generate_pawn_attacks() -> [[Bitboard; Position::MAX_POS]; 2] {
                     let target_file = file + df;
                     let target_rank = rank + dr;
                     if target_file >= 0 && target_file < 8 && target_rank >= 0 && target_rank < 8 {
-                        attacks[colour][square].set_square((target_rank * 8 + target_file) as usize);
+                        attacks[colour][square]
+                            .set_square((target_rank * 8 + target_file) as usize);
                     }
                 }
                 df += 1;
@@ -203,6 +221,155 @@ const fn generate_pawn_attacks() -> [[Bitboard; Position::MAX_POS]; 2] {
         square += 1;
     }
     attacks
+}
+
+/// Builds, for each square, the bitboard of all squares on the same rank or
+/// file (excluding the square itself).
+const fn generate_rook_rays() -> [Bitboard; Position::MAX_POS] {
+    let mut rays = [Bitboard(0); Position::MAX_POS];
+    let mut square = 0;
+    while square < Position::MAX_POS {
+        let file = square % 8;
+        let rank = square / 8;
+        let mut i = 0;
+        while i < 8 {
+            if i != file {
+                rays[square].set_square(rank * 8 + i);
+            }
+            if i != rank {
+                rays[square].set_square(i * 8 + file);
+            }
+            i += 1;
+        }
+        square += 1;
+    }
+    rays
+}
+
+/// Builds, for each square, the bitboard of all squares on its two diagonals
+/// (excluding the square itself).
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+const fn generate_bishop_rays() -> [Bitboard; Position::MAX_POS] {
+    let mut rays = [Bitboard(0); Position::MAX_POS];
+    let dirs = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
+    let mut square = 0;
+    while square < Position::MAX_POS {
+        let file = (square % 8) as isize;
+        let rank = (square / 8) as isize;
+        let mut d = 0;
+        while d < 4 {
+            let (df, dr) = dirs[d];
+            let mut nf = file + df;
+            let mut nr = rank + dr;
+            while nf >= 0 && nf < 8 && nr >= 0 && nr < 8 {
+                rays[square].set_square((nr * 8 + nf) as usize);
+                nf += df;
+                nr += dr;
+            }
+            d += 1;
+        }
+        square += 1;
+    }
+    rays
+}
+
+/// Builds `BETWEEN[a][b]`: the squares strictly between two aligned squares.
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::large_stack_arrays
+)]
+const fn generate_between() -> [[Bitboard; Position::MAX_POS]; Position::MAX_POS] {
+    let mut table = [[Bitboard(0); Position::MAX_POS]; Position::MAX_POS];
+    let mut a = 0;
+    while a < Position::MAX_POS {
+        let af = (a % 8) as isize;
+        let ar = (a / 8) as isize;
+        let mut b = 0;
+        while b < Position::MAX_POS {
+            if a != b {
+                let bf = (b % 8) as isize;
+                let br = (b / 8) as isize;
+                let dfile = bf - af;
+                let drank = br - ar;
+                // aligned on a rank, file, or diagonal
+                if dfile == 0 || drank == 0 || dfile == drank || dfile == -drank {
+                    let sf = step_sign(dfile);
+                    let sr = step_sign(drank);
+                    let mut nf = af + sf;
+                    let mut nr = ar + sr;
+                    while nf != bf || nr != br {
+                        table[a][b].set_square((nr * 8 + nf) as usize);
+                        nf += sf;
+                        nr += sr;
+                    }
+                }
+            }
+            b += 1;
+        }
+        a += 1;
+    }
+    table
+}
+
+/// Builds `LINE[a][b]`: the full rank, file, or diagonal through two aligned
+/// squares, extended to the board edges.
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::large_stack_arrays
+)]
+const fn generate_line() -> [[Bitboard; Position::MAX_POS]; Position::MAX_POS] {
+    let mut table = [[Bitboard(0); Position::MAX_POS]; Position::MAX_POS];
+    let mut a = 0;
+    while a < Position::MAX_POS {
+        let af = (a % 8) as isize;
+        let ar = (a / 8) as isize;
+        let mut b = 0;
+        while b < Position::MAX_POS {
+            if a != b {
+                let bf = (b % 8) as isize;
+                let br = (b / 8) as isize;
+                let dfile = bf - af;
+                let drank = br - ar;
+                if dfile == 0 || drank == 0 || dfile == drank || dfile == -drank {
+                    let sf = step_sign(dfile);
+                    let sr = step_sign(drank);
+                    table[a][b].set_square(a);
+                    // extend in the +direction to the edge
+                    let mut nf = af + sf;
+                    let mut nr = ar + sr;
+                    while nf >= 0 && nf < 8 && nr >= 0 && nr < 8 {
+                        table[a][b].set_square((nr * 8 + nf) as usize);
+                        nf += sf;
+                        nr += sr;
+                    }
+                    // and in the -direction to the edge
+                    let mut nf = af - sf;
+                    let mut nr = ar - sr;
+                    while nf >= 0 && nf < 8 && nr >= 0 && nr < 8 {
+                        table[a][b].set_square((nr * 8 + nf) as usize);
+                        nf -= sf;
+                        nr -= sr;
+                    }
+                }
+            }
+            b += 1;
+        }
+        a += 1;
+    }
+    table
+}
+
+/// Returns the unit step (-1, 0, or 1) in the direction of `delta`.
+const fn step_sign(delta: isize) -> isize {
+    if delta > 0 {
+        1
+    } else if delta < 0 {
+        -1
+    } else {
+        0
+    }
 }
 
 // pasted from find_all_magics
