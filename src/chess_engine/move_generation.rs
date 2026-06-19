@@ -50,11 +50,11 @@ impl Board {
     /// assert_eq!(board.generate_moves(WHITE).len(), 20);
     /// ```
     pub fn generate_moves(&mut self, turn: Turn) -> Vec<Move> {
-        generate_pseudo_legal_moves(self, turn)
-            .iter()
-            .filter(|m| !self.would_check(**m))
-            .copied()
-            .collect()
+        // Filter the pseudo-legal moves in place rather than collecting into a
+        // second Vec.
+        let mut moves = generate_pseudo_legal_moves(self, turn);
+        moves.retain(|m| !self.would_check(*m));
+        moves
     }
 }
 
@@ -70,7 +70,9 @@ pub fn generate_pseudo_legal_moves(board: &mut Board, turn: Turn) -> Vec<Move> {
 /// detection, where including castling would recurse infinitely.
 pub fn generate_pseudo_non_castle_moves(board: &Board, turn: Turn) -> Vec<Move> {
     // skip castle moves, used when checking for checks to avoid inf loop
-    let mut moves = Vec::new();
+    // capacity tuned to comfortably hold a typical position's move count so the
+    // sub-generators never reallocate mid-fill
+    let mut moves = Vec::with_capacity(48);
     sliding_pieces_moves(board, turn, &mut moves);
     knight_moves(board, turn, &mut moves);
     king_ring_moves(board, turn, &mut moves);

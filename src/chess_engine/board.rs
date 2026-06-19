@@ -16,12 +16,14 @@
 use super::bitboard::Bitboard;
 use super::castle_rights::CastleRights;
 use super::game_state::StateDelta;
-use super::move_generation::generate_pseudo_non_castle_moves;
 use super::position::Position;
 use super::r#const::EMPTY_BIT_B;
 use super::r#move::Move;
 use crate::chess_engine::{
-    computed_boards::ZOBRIST_TABLE,
+    computed_boards::{
+        BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, KING_RING_MOVES, KNIGHT_MOVES,
+        PAWN_ATTACKS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS, ZOBRIST_TABLE,
+    },
     fen_parser::START_POS_FEN,
     piece::{Piece, PIECE_COUNT},
     zobrist::ZobristHash,
@@ -243,18 +245,35 @@ impl Board {
     /// Removes `piece` of colour `turn` from `pos`, keeping the Zobrist hash in
     /// sync.
     pub(crate) fn remove_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
-        // remove piece from bitboard and zobrist key
+        // remove piece from bitboard and zobrist key, keeping the per-colour
+        // player_boards aggregate in sync incrementally. empty_tiles is derived
+        // from player_boards once per move (see refresh_empty_tiles) because a
+        // square can transiently hold two pieces during a capture sequence,
+        // which a naive set/clear here would get wrong.
         let bb_index = Self::get_bb_index(piece, turn);
-        self.piece_boards[bb_index].clear_square(pos.as_usize());
+        let square = pos.as_usize();
+        self.piece_boards[bb_index].clear_square(square);
+        self.player_boards[usize::from(turn)].clear_square(square);
         self.xor_piece_from_zobrist(turn, piece, pos);
     }
 
-    /// Adds `piece` of colour `turn` at `pos`, keeping the Zobrist hash in sync.
+    /// Adds `piece` of colour `turn` at `pos`, keeping the Zobrist hash and the
+    /// per-colour player board in sync.
     pub(crate) fn add_piece(&mut self, turn: Turn, piece: Piece, pos: Position) {
-        // add piece to bitboard and zobrist key
+        // see remove_piece for why empty_tiles is not touched here
         let bb_index = Self::get_bb_index(piece, turn);
-        self.piece_boards[bb_index].set_square(pos.as_usize());
+        let square = pos.as_usize();
+        self.piece_boards[bb_index].set_square(square);
+        self.player_boards[usize::from(turn)].set_square(square);
         self.xor_piece_from_zobrist(turn, piece, pos);
+    }
+
+    /// Recomputes [`empty_tiles`](Board::empty_tiles) from the per-colour
+    /// [`player_boards`](Board::player_boards). Cheap (one OR + one NOT) and used
+    /// after a move's piece edits settle, since `player_boards` is kept correct
+    /// incrementally while `empty_tiles` is not.
+    pub(crate) fn refresh_empty_tiles(&mut self) {
+        self.empty_tiles = !(self.player_boards[0] | self.player_boards[1]);
     }
 
     /// Toggles a single `(colour, piece, square)` entry in the Zobrist hash;
@@ -319,13 +338,53 @@ impl Board {
         (Piece::from(index % PIECE_COUNT), index >= PIECE_COUNT)
     }
 
-    /// Returns `true` if `attacking_player` attacks `tile`. Implemented by
-    /// generating that side's pseudo-legal non-castle moves and checking whether
-    /// any targets `tile`.
+    /// Returns `true` if `attacking_player` attacks `tile`. Rather than
+    /// enumerating that side's moves, this projects each piece type's attacks
+    /// *outward from `tile`* and intersects with the matching enemy pieces — a
+    /// pawn attacks `tile` iff an enemy pawn sits on a square this side's pawn on
+    /// `tile` would capture, a knight iff an enemy knight is a knight-jump away,
+    /// and so on for the king and (via the magic tables) the sliders.
     #[must_use]
     pub fn tile_under_attack(&self, tile: Position, attacking_player: Turn) -> bool {
-        let moves = generate_pseudo_non_castle_moves(self, attacking_player);
-        moves.iter().any(|m| m.get_dest() == tile)
+        self.is_square_attacked(tile.as_usize(), attacking_player)
+    }
+
+    /// Returns `true` if any piece belonging to `by` attacks square `sq`
+    /// (a `0..64` index). This is the allocation-free core of check detection;
+    /// see [`tile_under_attack`](Self::tile_under_attack).
+    #[must_use]
+    pub fn is_square_attacked(&self, sq: usize, by: Turn) -> bool {
+        // knights
+        if (KNIGHT_MOVES[sq] & self.get_piece_bitboard(Piece::Knight, by)).is_not_empty() {
+            return true;
+        }
+        // king adjacency
+        if (KING_RING_MOVES[sq] & self.get_piece_bitboard(Piece::King, by)).is_not_empty() {
+            return true;
+        }
+        // pawns: a `by`-pawn attacks `sq` from the squares a pawn of the
+        // opposite colour on `sq` would attack
+        let pawn_sources = PAWN_ATTACKS[usize::from(!by)][sq];
+        if (pawn_sources & self.get_piece_bitboard(Piece::Pawn, by)).is_not_empty() {
+            return true;
+        }
+
+        let queens = self.get_piece_bitboard(Piece::Queen, by);
+        let occupied = !self.empty_tiles;
+
+        // bishops / queens along diagonals
+        let bishop_entry = BISHOP_MAGICS[sq];
+        let bishop_attacks = BISHOP_ATTACKS
+            [bishop_entry.magic_index(occupied & BISHOP_BLOCKERS[sq]) + bishop_entry.offset];
+        if (bishop_attacks & (self.get_piece_bitboard(Piece::Bishop, by) | queens)).is_not_empty() {
+            return true;
+        }
+
+        // rooks / queens along ranks and files
+        let rook_entry = ROOK_MAGICS[sq];
+        let rook_attacks =
+            ROOK_ATTACKS[rook_entry.magic_index(occupied & ROOK_BLOCKERS[sq]) + rook_entry.offset];
+        (rook_attacks & (self.get_piece_bitboard(Piece::Rook, by) | queens)).is_not_empty()
     }
 
     /// Returns `true` if `turn`'s king is currently attacked.

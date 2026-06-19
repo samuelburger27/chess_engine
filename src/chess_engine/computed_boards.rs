@@ -24,6 +24,11 @@ use super::bitboard::Bitboard;
 pub const KNIGHT_MOVES: [Bitboard; Position::MAX_POS] = generate_knight_moves();
 /// King one-step destination squares ("king ring"), indexed by the king's square.
 pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_moves();
+/// Pawn capture squares, indexed by `[colour][square]` (white = 0, black = 1):
+/// the squares a pawn of that colour standing on `square` attacks. Indexing with
+/// the *opposite* colour yields the squares from which such a pawn attacks
+/// `square`, which is what attack detection needs.
+pub const PAWN_ATTACKS: [[Bitboard; Position::MAX_POS]; 2] = generate_pawn_attacks();
 
 /// Relevant-blocker masks for a rook on each square (ray squares minus the edges).
 pub const ROOK_BLOCKERS: [Bitboard; Position::MAX_POS] =
@@ -166,6 +171,38 @@ const fn generate_knight_moves() -> [Bitboard; Position::MAX_POS] {
         square += 1;
     }
     moves
+}
+
+/// Builds, for each colour and square, the bitboard of the (up-to-two) squares a
+/// pawn of that colour attacks diagonally forward. White (index 0) attacks one
+/// rank up, black (index 1) one rank down.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+const fn generate_pawn_attacks() -> [[Bitboard; Position::MAX_POS]; 2] {
+    let mut attacks = [[Bitboard(0); Position::MAX_POS]; 2];
+    let mut square = 0;
+    while square < Position::MAX_POS {
+        let file = (square % 8) as isize;
+        let rank = (square / 8) as isize;
+        // white pawns attack up-left/up-right, black pawns down-left/down-right
+        let mut colour = 0;
+        while colour < 2 {
+            let dr = if colour == 0 { 1 } else { -1 };
+            let mut df = -1;
+            while df <= 1 {
+                if df != 0 {
+                    let target_file = file + df;
+                    let target_rank = rank + dr;
+                    if target_file >= 0 && target_file < 8 && target_rank >= 0 && target_rank < 8 {
+                        attacks[colour][square].set_square((target_rank * 8 + target_file) as usize);
+                    }
+                }
+                df += 1;
+            }
+            colour += 1;
+        }
+        square += 1;
+    }
+    attacks
 }
 
 // pasted from find_all_magics
