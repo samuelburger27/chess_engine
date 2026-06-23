@@ -158,7 +158,6 @@ impl Board {
         // player_boards is maintained incrementally by add_piece/remove_piece;
         // empty_tiles only needs the cheap derive once the edits have settled
         self.refresh_empty_tiles();
-        self.update_game_result();
     }
 
     /// After a rook is captured, revokes the opponent's castling right on that
@@ -247,7 +246,6 @@ impl Board {
         // player_boards stays in sync via add_piece/remove_piece; derive
         // empty_tiles from it
         self.refresh_empty_tiles();
-        self.update_game_result();
     }
 
     /// Finds the legal move matching `(origin, dest, promote)` and commits it,
