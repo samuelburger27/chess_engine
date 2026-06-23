@@ -25,6 +25,7 @@ use crate::chess_engine::{
         PAWN_ATTACKS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS, ZOBRIST_TABLE,
     },
     fen_parser::START_POS_FEN,
+    masks::BLACK_SQUARES,
     piece::{Piece, PIECE_COUNT},
     zobrist::ZobristHash,
 };
@@ -38,20 +39,6 @@ pub const PLAYER_COUNT: usize = 2;
 pub const WHITE: Turn = false;
 /// The black side ([`Turn`] = `true`).
 pub const BLACK: Turn = true;
-
-/// High-level status of a position. Currently informational; the search derives
-/// terminal results (checkmate/draw) directly while exploring.
-#[derive(Clone, PartialEq, Eq)]
-pub enum GameState {
-    /// Normal play, no special condition.
-    Playing,
-    /// The side to move is in check.
-    Check,
-    /// The game is drawn.
-    Draw,
-    /// The side to move is checkmated.
-    CheckMate,
-}
 
 /// A full chess position: piece placement, side to move, and the auxiliary
 /// state (castling rights, en passant, clocks, Zobrist hash, undo history).
@@ -83,8 +70,6 @@ pub struct Board {
     pub(crate) zobrist_key: ZobristHash,
     /// Undo stack: the pre-move snapshot for every move played from this board.
     pub(crate) history: Vec<StateDelta>,
-    /// Cached high-level [`GameState`].
-    pub(crate) game_state: GameState,
 }
 
 impl Board {
@@ -113,7 +98,6 @@ impl Board {
             castle_rights: CastleRights::make_default(),
             zobrist_key: 0,
             history: Vec::new(),
-            game_state: GameState::Playing,
         }
     }
 
@@ -199,10 +183,10 @@ impl Board {
             0 | 1 => true,
             2 => {
                 // only K+B vs K+B with same-coloured bishops is a dead draw
-                let dark_squares = Bitboard::from_u64(0xAA55_AA55_AA55_AA55);
                 self.get_piece_bitboard(Piece::Bishop, WHITE).count_bits() == 1
                     && self.get_piece_bitboard(Piece::Bishop, BLACK).count_bits() == 1
-                    && ((bishops & dark_squares) == bishops || (bishops & dark_squares).is_empty())
+                    && ((bishops & BLACK_SQUARES) == bishops
+                        || (bishops & BLACK_SQUARES).is_empty())
             }
             _ => false,
         }
@@ -216,30 +200,6 @@ impl Board {
             .iter()
             .filter(|s| s.zobrist_hash == self.zobrist_key)
             .count()
-    }
-
-    /// Placeholder for refreshing the cached [`GameState`]. Currently a no-op:
-    /// terminal results are detected inside the search instead (see the
-    /// commented-out reference implementation below).
-    #[allow(clippy::unused_self)]
-    pub(crate) const fn update_game_result(&self) {
-        // this method should be called when creating board and when committing a move
-        // TODO finish
-        // TODO maybe think about
-        // let moves = self.generate_moves(self.turn);
-        // if self.in_check(self.turn) {
-        //     if moves.is_empty() {
-        //         self.game_state = GameState::CheckMate;
-        //     } else {
-        //         self.game_state = GameState::Check;
-        //     }
-        // } else if self.halfmove_count >= 50 || moves.is_empty() || self.is_insufficient_material() ||
-        // self.get_count_of_current_position_reached() >= 3 {
-        //     self.game_state = GameState::Draw
-        // }
-        // // TODO check for dead position
-        // // add check for positions
-        // self.game_state = GameState::Playing
     }
 
     /// Removes `piece` of colour `turn` from `pos`, keeping the Zobrist hash in

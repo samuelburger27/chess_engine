@@ -18,6 +18,9 @@ pub const RANK_7: Bitboard = Bitboard(0x00FF_0000_0000_0000);
 /// Bit representation of rank 8.
 pub const RANK_8: Bitboard = Bitboard(0xFF00_0000_0000_0000);
 
+/// Bit representation of the black squares
+pub const BLACK_SQUARES: Bitboard = Bitboard(0xAA55_AA55_AA55_AA55);
+
 // bits that should be empty when castling
 /// Squares (f8, g8) that must be empty for Black to castle king-side.
 pub const B_KING_CASTLE_EMPTY: Bitboard =
