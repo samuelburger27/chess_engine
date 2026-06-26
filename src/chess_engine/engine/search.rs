@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use crate::chess_engine::engine::evaluation::evaluate;
+use crate::chess_engine::engine::transposition::{Bound, TranspositionTable};
 use crate::chess_engine::piece::Piece;
 
 use super::super::{board::Board, moves::Move, moves::SpecialMove};
@@ -93,6 +94,7 @@ struct SearchContext<'a> {
     deadline: Option<Instant>,
     nodes: u64,
     aborted: bool,
+    tt: &'a TranspositionTable,
 }
 
 impl SearchContext<'_> {
@@ -132,7 +134,15 @@ impl SearchContext<'_> {
 #[must_use]
 pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
     let stop = AtomicBool::new(false);
-    search_position(&mut board.clone(), SearchLimits::depth(depth), &stop, false)
+    // No shared table here, so allocate a private one for this search.
+    let tt = TranspositionTable::new();
+    search_position(
+        &mut board.clone(),
+        SearchLimits::depth(depth),
+        &stop,
+        &tt,
+        false,
+    )
 }
 
 /// Iterative-deepening driver over fail-soft negamax with alpha-beta pruning.
@@ -144,14 +154,17 @@ pub fn search_position(
     board: &mut Board,
     limits: SearchLimits,
     stop: &AtomicBool,
+    tt: &TranspositionTable,
     report: bool,
 ) -> SearchResult {
     let start = Instant::now();
+    tt.new_generation();
     let mut ctx = SearchContext {
         stop,
         deadline: limits.deadline,
         nodes: 0,
         aborted: false,
+        tt,
     };
 
     let mut result = SearchResult {
@@ -225,6 +238,7 @@ fn print_info(result: &SearchResult, start: Instant) {
 
 /// Negamax with alpha-beta pruning (fail-soft). Returns the score from the
 /// perspective of the side to move; `pv` receives the principal variation.
+#[allow(clippy::cast_possible_truncation)]
 fn negamax(
     board: &mut Board,
     depth: u8,
@@ -253,6 +267,24 @@ fn negamax(
         return quiescence(board, alpha, beta, ctx);
     }
 
+    // Transposition-table probe. A sufficiently deep entry can cut the node off
+    // outright; otherwise its move still seeds move ordering. The root (ply 0) is
+    // never cut off, so its move loop always runs and yields a best move.
+    let tt_entry = ctx.tt.probe(board.zobrist_key);
+    if ply > 0
+        && let Some(entry) = tt_entry
+        && entry.depth >= depth
+    {
+        let score = score_from_tt(entry.score, ply);
+        match entry.bound {
+            Bound::Exact => return score,
+            Bound::Lower if score >= beta => return score,
+            Bound::Upper if score <= alpha => return score,
+            _ => {}
+        }
+    }
+    let tt_move = tt_entry.and_then(|entry| entry.mv);
+
     let mut moves = board.generate_moves(board.turn);
     if moves.is_empty() {
         return if board.in_check(board.turn) {
@@ -262,9 +294,11 @@ fn negamax(
             0 // stalemate
         };
     }
-    order_moves(board, &mut moves);
+    order_moves(board, &mut moves, tt_move);
 
+    let alpha_orig = alpha;
     let mut best_score = -INFINITY;
+    let mut best_move: Option<Move> = None;
     for mv in moves {
         board.commit_verified_move(mv);
         let mut child_pv = Vec::new();
@@ -277,6 +311,7 @@ fn negamax(
 
         if score > best_score {
             best_score = score;
+            best_move = Some(mv);
         }
         if score > alpha {
             alpha = score;
@@ -289,7 +324,47 @@ fn negamax(
         }
     }
 
+    // Classify the result relative to the original window and cache it.
+    let bound = if best_score <= alpha_orig {
+        Bound::Upper
+    } else if best_score >= beta {
+        Bound::Lower
+    } else {
+        Bound::Exact
+    };
+    ctx.tt.store(
+        board.zobrist_key,
+        best_move,
+        score_to_tt(best_score, ply) as i16,
+        depth,
+        bound,
+    );
+
     best_score
+}
+
+/// Rebases a mate score from node-relative (as stored in the table) to
+/// root-relative (as used in the search), undoing [`score_to_tt`].
+fn score_from_tt(score: i32, ply: u8) -> i32 {
+    if score >= MATE_THRESHOLD {
+        score - i32::from(ply)
+    } else if score <= -MATE_THRESHOLD {
+        score + i32::from(ply)
+    } else {
+        score
+    }
+}
+
+/// Rebases a mate score from root-relative to node-relative for storage, so a
+/// "mate in N from here" is cached independently of how deep this node sits.
+fn score_to_tt(score: i32, ply: u8) -> i32 {
+    if score >= MATE_THRESHOLD {
+        score + i32::from(ply)
+    } else if score <= -MATE_THRESHOLD {
+        score - i32::from(ply)
+    } else {
+        score
+    }
 }
 
 /// Quiescence search: extend the search through captures and promotions so
@@ -312,7 +387,7 @@ fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchCont
         .into_iter()
         .filter(|&m| is_tactical(board, m))
         .collect();
-    order_moves(board, &mut moves);
+    order_moves(board, &mut moves, None);
 
     for mv in moves {
         board.commit_verified_move(mv);
@@ -358,13 +433,16 @@ const fn piece_value(piece: Piece) -> i32 {
     }
 }
 
-/// Order moves so the most forcing ones are searched first: promotions and
-/// captures (MVV-LVA: most valuable victim, least valuable attacker) before
-/// quiet moves.
-fn order_moves(board: &Board, moves: &mut [Move]) {
+/// Score given to the transposition-table move so it is always searched first.
+const TT_MOVE_SCORE: i32 = 1_000_000;
+
+/// Order moves so the most forcing ones are searched first: the
+/// transposition-table move, then promotions and captures (MVV-LVA: most
+/// valuable victim, least valuable attacker), then quiet moves.
+fn order_moves(board: &Board, moves: &mut [Move], tt_move: Option<Move>) {
     let mut scored: Vec<(i32, Move)> = moves
         .iter()
-        .map(|&mv| (move_order_score(board, mv), mv))
+        .map(|&mv| (move_order_score(board, mv, tt_move), mv))
         .collect();
     scored.sort_by_key(|(score, _)| -*score);
     for (slot, (_, mv)) in moves.iter_mut().zip(scored) {
@@ -372,10 +450,13 @@ fn order_moves(board: &Board, moves: &mut [Move]) {
     }
 }
 
-/// Heuristic ordering score for a single move: promotions highest, then
-/// captures by MVV-LVA (victim value weighted above attacker value), then quiet
-/// moves at `0`.
-fn move_order_score(board: &Board, mv: Move) -> i32 {
+/// Heuristic ordering score for a single move: the transposition-table move
+/// highest, then promotions, then captures by MVV-LVA (victim value weighted
+/// above attacker value), then quiet moves at `0`.
+fn move_order_score(board: &Board, mv: Move, tt_move: Option<Move>) -> i32 {
+    if tt_move == Some(mv) {
+        return TT_MOVE_SCORE;
+    }
     let mut score = 0;
     match mv.get_special_move() {
         SpecialMove::Promotion => {

@@ -24,6 +24,7 @@ use crate::{
     chess_engine::{
         board::{Board, WHITE},
         engine::search::{SearchLimits, search_position},
+        engine::transposition::TranspositionTable,
     },
     perft::perft_divide,
 };
@@ -43,6 +44,8 @@ struct EngineState {
     board: Board,
     stop: Arc<AtomicBool>,
     search_thread: Option<JoinHandle<()>>,
+    /// Shared, game-long transposition table; cleared on `ucinewgame`.
+    tt: Arc<TranspositionTable>,
 }
 
 impl EngineState {
@@ -68,6 +71,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
         board: Board::new_start_pos()?,
         stop: Arc::new(AtomicBool::new(false)),
         search_thread: None,
+        tt: Arc::new(TranspositionTable::new()),
     };
 
     let stdin = std::io::stdin();
@@ -83,6 +87,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
             "isready" => println!("readyok"),
             "ucinewgame" => {
                 state.stop_search();
+                state.tt.clear();
                 state.board = Board::new_start_pos()?;
             }
             "position" => {
@@ -131,8 +136,9 @@ fn handle_go(parts: &[&str], state: &mut EngineState) {
 
     let mut board = state.board.clone();
     let stop = Arc::clone(&state.stop);
+    let tt = Arc::clone(&state.tt);
     state.search_thread = Some(std::thread::spawn(move || {
-        let result = search_position(&mut board, limits, &stop, true);
+        let result = search_position(&mut board, limits, &stop, &tt, true);
         match result.best_move {
             Some(best_move) => println!("bestmove {best_move}"),
             None => println!("bestmove 0000"),
