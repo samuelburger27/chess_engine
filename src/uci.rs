@@ -38,6 +38,15 @@ const ENGINE_AUTHOR: &str = "Samuel Burger";
 /// because of I/O latency.
 const MOVE_OVERHEAD_MS: u64 = 30;
 
+/// Upper bound advertised (and enforced) for the `Threads` option.
+const MAX_THREADS: usize = 256;
+
+/// The default thread count: the number of logical cores, or 1 if that cannot be
+/// determined.
+fn default_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
+}
+
 /// The mutable state the protocol loop carries between commands: the current
 /// position, the shared stop flag, and the handle of any running search thread.
 struct EngineState {
@@ -46,6 +55,8 @@ struct EngineState {
     search_thread: Option<JoinHandle<()>>,
     /// Shared, game-long transposition table; cleared on `ucinewgame`.
     tt: Arc<TranspositionTable>,
+    /// Number of search threads (Lazy SMP); set via `setoption name Threads`.
+    threads: usize,
 }
 
 impl EngineState {
@@ -72,6 +83,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
         stop: Arc::new(AtomicBool::new(false)),
         search_thread: None,
         tt: Arc::new(TranspositionTable::new()),
+        threads: default_threads(),
     };
 
     let stdin = std::io::stdin();
@@ -84,6 +96,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
         match parts[0] {
             "uci" => print_identity(),
+            "setoption" => handle_setoption(&parts, &mut state),
             "isready" => println!("readyok"),
             "ucinewgame" => {
                 state.stop_search();
@@ -110,11 +123,28 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Sends the `id name`/`id author`/`uciok` handshake in response to `uci`.
+/// Sends the `id name`/`id author`, the supported options, and the `uciok`
+/// handshake in response to `uci`.
 fn print_identity() {
     println!("id name {ENGINE_NAME}");
     println!("id author {ENGINE_AUTHOR}");
+    println!(
+        "option name Threads type spin default {} min 1 max {MAX_THREADS}",
+        default_threads()
+    );
     println!("uciok");
+}
+
+/// Handles `setoption name <Name> value <X>`. Only `Threads` is supported; the
+/// value is clamped to `1..=MAX_THREADS`. Unknown options are ignored, per spec.
+fn handle_setoption(parts: &[&str], state: &mut EngineState) {
+    if let Some(name_idx) = parts.iter().position(|&p| p == "name")
+        && let Some(value_idx) = parts.iter().position(|&p| p == "value")
+        && parts.get(name_idx + 1) == Some(&"Threads")
+        && let Some(value) = parts.get(value_idx + 1).and_then(|v| v.parse::<usize>().ok())
+    {
+        state.threads = value.clamp(1, MAX_THREADS);
+    }
 }
 
 /// Handles a `go` command: runs `perft` synchronously, or otherwise spawns a
@@ -137,8 +167,9 @@ fn handle_go(parts: &[&str], state: &mut EngineState) {
     let mut board = state.board.clone();
     let stop = Arc::clone(&state.stop);
     let tt = Arc::clone(&state.tt);
+    let threads = state.threads;
     state.search_thread = Some(std::thread::spawn(move || {
-        let result = search_position(&mut board, limits, &stop, &tt, true);
+        let result = search_position(&mut board, limits, &stop, &tt, threads, true);
         match result.best_move {
             Some(best_move) => println!("bestmove {best_move}"),
             None => println!("bestmove 0000"),
