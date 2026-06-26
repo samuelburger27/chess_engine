@@ -25,7 +25,7 @@
 //! repetition is still detected; deeper path effects are not. This is the
 //! standard, accepted trade-off.
 
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use crate::chess_engine::moves::Move;
 
@@ -250,7 +250,10 @@ mod tests {
         ] {
             let data = pack(Some(sample_move()), score, 17, bound, 5);
             assert_eq!(data as u16, sample_move().get_raw());
-            assert_eq!(i32::from(((data >> 16) as u16).cast_signed()), i32::from(score));
+            assert_eq!(
+                i32::from(((data >> 16) as u16).cast_signed()),
+                i32::from(score)
+            );
             assert_eq!(unpack_depth(data), 17);
             assert_eq!(Bound::from_bits(data >> BOUND_SHIFT), bound);
             assert_eq!(unpack_generation(data), 5);
@@ -273,7 +276,13 @@ mod tests {
     #[test]
     fn probe_absent_key_misses() {
         let tt = TranspositionTable::new();
-        tt.store(0xAAAA_AAAA_AAAA_AAAA, Some(sample_move()), 100, 5, Bound::Exact);
+        tt.store(
+            0xAAAA_AAAA_AAAA_AAAA,
+            Some(sample_move()),
+            100,
+            5,
+            Bound::Exact,
+        );
         // Same slot index, different key — must not be reported as a hit.
         let colliding = 0xAAAA_AAAA_AAAA_AAAA ^ (1 << 40);
         assert!(tt.probe(colliding).is_none());
