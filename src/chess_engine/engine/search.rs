@@ -16,7 +16,7 @@
 //!
 //! [negamax]: https://www.chessprogramming.org/Negamax
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use crate::chess_engine::engine::evaluation::evaluate;
@@ -88,22 +88,32 @@ pub struct SearchResult {
 }
 
 /// Mutable state threaded through the recursive search: the stop signal, the
-/// deadline, the running node count, and whether an abort has been requested.
+/// deadline, this worker's local node count, the shared cross-thread node total,
+/// the transposition table, and whether an abort has been requested.
 struct SearchContext<'a> {
     stop: &'a AtomicBool,
     deadline: Option<Instant>,
     nodes: u64,
     aborted: bool,
     tt: &'a TranspositionTable,
+    /// Aggregate node count across all search threads, flushed in bulk so the
+    /// hot path stays contention-free.
+    shared_nodes: &'a AtomicU64,
+    /// Per-thread seed that perturbs the ordering of equal-ranked quiet moves so
+    /// Lazy SMP helpers explore divergent trees. `0` (the main worker) keeps the
+    /// clean, deterministic order.
+    order_noise: u64,
 }
 
 impl SearchContext<'_> {
-    /// Counts the current node and, every [`ABORT_CHECK_INTERVAL`] nodes, checks
-    /// the stop flag and deadline. Returns `true` once an abort has been
-    /// triggered.
+    /// Counts the current node and, every [`ABORT_CHECK_INTERVAL`] nodes, flushes
+    /// the interval into the shared total and checks the stop flag and deadline.
+    /// Returns `true` once an abort has been triggered.
     fn count_node_and_check_abort(&mut self) -> bool {
         self.nodes += 1;
         if self.nodes.is_multiple_of(ABORT_CHECK_INTERVAL) {
+            self.shared_nodes
+                .fetch_add(ABORT_CHECK_INTERVAL, Ordering::Relaxed);
             if self.stop.load(Ordering::Relaxed) {
                 self.aborted = true;
             } else if let Some(deadline) = self.deadline
@@ -141,32 +151,83 @@ pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
         SearchLimits::depth(depth),
         &stop,
         &tt,
+        1,
         false,
     )
 }
 
-/// Iterative-deepening driver over fail-soft negamax with alpha-beta pruning.
+/// Iterative-deepening, alpha-beta search over `threads` workers (Lazy SMP).
 ///
-/// Searches `board` until the depth limit, the deadline, or the stop flag
-/// ends the search, and returns the result of the last fully completed
-/// iteration. When `report` is set, a UCI `info` line is printed per depth.
+/// One *main* worker drives reporting and supplies the returned result; the
+/// remaining `threads - 1` *helper* workers search the same root on their own
+/// board clones and share the transposition table, diverging through TT timing
+/// races so they widen the main worker's effective search. All workers share the
+/// stop flag, the deadline, and an aggregate node counter; each completed search
+/// returns the result of the main worker's last fully completed iteration.
+///
+/// `threads` is clamped to at least 1. When `report` is set, a UCI `info` line is
+/// printed per depth by the main worker.
 pub fn search_position(
     board: &mut Board,
     limits: SearchLimits,
     stop: &AtomicBool,
     tt: &TranspositionTable,
+    threads: usize,
     report: bool,
 ) -> SearchResult {
     let start = Instant::now();
     tt.new_generation();
-    let mut ctx = SearchContext {
+    let shared_nodes = AtomicU64::new(0);
+
+    // `order_noise` of 0 marks the main worker (clean, deterministic ordering);
+    // helpers get distinct non-zero seeds so they diverge.
+    let make_ctx = |order_noise: u64| SearchContext {
         stop,
         deadline: limits.deadline,
         nodes: 0,
         aborted: false,
         tt,
+        shared_nodes: &shared_nodes,
+        order_noise,
     };
 
+    if threads <= 1 {
+        return run_iterative(board, limits, &mut make_ctx(0), start, report, 1);
+    }
+
+    std::thread::scope(|scope| {
+        // Helper workers: own board clone, no reporting, a per-thread ordering
+        // seed, and a slightly staggered start depth. Their results are discarded;
+        // they contribute only through the shared transposition table.
+        for i in 1..threads {
+            let mut helper_board = board.clone();
+            let mut ctx = make_ctx(i as u64);
+            let start_depth = if i % 2 == 0 { 1 } else { 2 };
+            scope.spawn(move || {
+                run_iterative(&mut helper_board, limits, &mut ctx, start, false, start_depth);
+            });
+        }
+
+        // Main worker runs on this thread and owns the reported result.
+        let result = run_iterative(board, limits, &mut make_ctx(0), start, report, 1);
+        // Tell the helpers to wind down; `scope` then joins them.
+        stop.store(true, Ordering::Relaxed);
+        result
+    })
+}
+
+/// One worker's iterative-deepening loop: searches depths `start_depth..` until
+/// the depth limit, deadline, stop flag, or a forced mate ends it, returning the
+/// last fully completed iteration. Node statistics reflect the shared
+/// cross-thread total.
+fn run_iterative(
+    board: &mut Board,
+    limits: SearchLimits,
+    ctx: &mut SearchContext,
+    start: Instant,
+    report: bool,
+    start_depth: u8,
+) -> SearchResult {
     let mut result = SearchResult {
         best_move: None,
         score: 0,
@@ -175,9 +236,9 @@ pub fn search_position(
         pv: Vec::new(),
     };
 
-    for depth in 1..=limits.depth.max(1) {
+    for depth in start_depth..=limits.depth.max(start_depth) {
         let mut pv = Vec::new();
-        let score = negamax(board, depth, 0, -INFINITY, INFINITY, &mut ctx, &mut pv);
+        let score = negamax(board, depth, 0, -INFINITY, INFINITY, ctx, &mut pv);
         if ctx.aborted {
             break;
         }
@@ -186,7 +247,7 @@ pub fn search_position(
             best_move: pv.first().copied(),
             score,
             depth,
-            nodes: ctx.nodes,
+            nodes: ctx.shared_nodes.load(Ordering::Relaxed),
             pv,
         };
 
@@ -200,7 +261,7 @@ pub fn search_position(
         }
     }
 
-    result.nodes = ctx.nodes;
+    result.nodes = ctx.shared_nodes.load(Ordering::Relaxed);
     result
 }
 
@@ -294,7 +355,7 @@ fn negamax(
             0 // stalemate
         };
     }
-    order_moves(board, &mut moves, tt_move);
+    order_moves(board, &mut moves, tt_move, ctx.order_noise);
 
     let alpha_orig = alpha;
     let mut best_score = -INFINITY;
@@ -387,7 +448,7 @@ fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchCont
         .into_iter()
         .filter(|&m| is_tactical(board, m))
         .collect();
-    order_moves(board, &mut moves, None);
+    order_moves(board, &mut moves, None, ctx.order_noise);
 
     for mv in moves {
         board.commit_verified_move(mv);
@@ -438,16 +499,31 @@ const TT_MOVE_SCORE: i32 = 1_000_000;
 
 /// Order moves so the most forcing ones are searched first: the
 /// transposition-table move, then promotions and captures (MVV-LVA: most
-/// valuable victim, least valuable attacker), then quiet moves.
-fn order_moves(board: &Board, moves: &mut [Move], tt_move: Option<Move>) {
+/// valuable victim, least valuable attacker), then quiet moves. A non-zero
+/// `noise` seed perturbs the order of equal-ranked (quiet) moves so Lazy SMP
+/// helpers diverge.
+fn order_moves(board: &Board, moves: &mut [Move], tt_move: Option<Move>, noise: u64) {
     let mut scored: Vec<(i32, Move)> = moves
         .iter()
-        .map(|&mv| (move_order_score(board, mv, tt_move), mv))
+        .map(|&mv| (move_order_score(board, mv, tt_move) + order_jitter(noise, mv), mv))
         .collect();
     scored.sort_by_key(|(score, _)| -*score);
     for (slot, (_, mv)) in moves.iter_mut().zip(scored) {
         *slot = mv;
     }
+}
+
+/// A small (`0..64`) per-thread perturbation, derived from the worker's `noise`
+/// seed and the move. It is smaller than the gap between any two move-ordering
+/// tiers, so it only ever shuffles already-equal (quiet) moves and never demotes
+/// a capture or the TT move. Returns `0` for the main worker (`noise == 0`).
+#[allow(clippy::cast_possible_truncation)]
+fn order_jitter(noise: u64, mv: Move) -> i32 {
+    if noise == 0 {
+        return 0;
+    }
+    let hash = (noise ^ u64::from(mv.get_raw())).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    (hash >> 58) as i32
 }
 
 /// Heuristic ordering score for a single move: the transposition-table move
