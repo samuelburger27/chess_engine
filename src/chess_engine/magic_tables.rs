@@ -13,9 +13,9 @@
 use super::bitboard::Bitboard;
 use crate::chess_engine::{
     computed_boards::{BISHOP_BLOCKERS, ROOK_BLOCKERS},
+    constants::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
     move_generation::get_sliding_moves,
     position::Position,
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
 };
 use rand::{RngExt, SeedableRng};
 use rand_pcg::Pcg64Mcg;

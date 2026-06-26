@@ -18,7 +18,7 @@
 //! # Examples
 //!
 //! ```
-//! use chess_engine::chess_engine::r#move::Move;
+//! use chess_engine::chess_engine::moves::Move;
 //! use chess_engine::chess_engine::position::Position;
 //!
 //! let m = Move::new_default(Position::new(12), Position::new(28)); // e2 -> e4
@@ -32,11 +32,11 @@ use std::fmt::{self, Debug};
 use super::position::Position;
 use crate::chess_engine::{
     board::{Turn, WHITE},
-    piece::Piece,
-    r#const::{
+    constants::{
         B_KING_CASTLE_DEST, B_KING_START, B_QUEEN_CASTLE_DEST, W_KING_CASTLE_DEST, W_KING_START,
         W_QUEEN_CASTLE_DEST,
     },
+    piece::Piece,
 };
 
 /// The kind of a move, decoded from a [`Move`]'s special-move bits.
@@ -116,7 +116,7 @@ impl Move {
     /// Decodes the special-move type (bits 14–15).
     ///
     /// ```
-    /// use chess_engine::chess_engine::r#move::{Move, SpecialMove};
+    /// use chess_engine::chess_engine::moves::{Move, SpecialMove};
     /// use chess_engine::chess_engine::position::Position;
     /// let m = Move::new_default(Position::new(12), Position::new(28));
     /// assert_eq!(m.get_special_move(), SpecialMove::NormalMove);
@@ -164,7 +164,7 @@ impl Move {
     /// advancing from `origin` to `destination`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::r#move::Move;
+    /// use chess_engine::chess_engine::moves::Move;
     /// use chess_engine::chess_engine::position::Position;
     /// // e7 (52) -> e8 (60)
     /// let promos = Move::new_promote(Position::new(52), Position::new(60));

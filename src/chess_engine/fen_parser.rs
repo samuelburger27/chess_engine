@@ -6,10 +6,10 @@
 //!
 //! [fen]: https://www.chessprogramming.org/Forsyth-Edwards_Notation
 
-use super::r#const::EMPTY_BIT_B;
-use crate::chess_engine::board::{Board, Turn, BLACK, PLAYER_COUNT, WHITE};
+use super::constants::EMPTY_BIT_B;
+use crate::chess_engine::board::{BLACK, Board, PLAYER_COUNT, Turn, WHITE};
 use crate::chess_engine::castle_rights::CastleRights;
-use crate::chess_engine::piece::{Piece, PIECE_COUNT};
+use crate::chess_engine::piece::{PIECE_COUNT, Piece};
 use crate::chess_engine::position::Position;
 
 /// FEN of the standard starting position.
@@ -124,7 +124,7 @@ impl Board {
 
 #[cfg(test)]
 mod tests {
-    use crate::chess_engine::board::{Board, BLACK, WHITE};
+    use crate::chess_engine::board::{BLACK, Board, WHITE};
     use crate::chess_engine::piece::Piece;
     use crate::chess_engine::position::Position;
 
@@ -142,7 +142,7 @@ mod tests {
             board.get_piece_at(Position::new(63)),
             Some((Piece::Rook, BLACK))
         ); // h8
-           // the centre is empty
+        // the centre is empty
         assert_eq!(board.get_piece_at(Position::new(28)), None); // e4
     }
 

@@ -8,7 +8,7 @@
 //! stack and restores these fields.
 
 use crate::chess_engine::{
-    bitboard::Bitboard, castle_rights::CastleRights, piece::Piece, r#move::Move,
+    bitboard::Bitboard, castle_rights::CastleRights, moves::Move, piece::Piece,
     zobrist::ZobristHash,
 };
 
