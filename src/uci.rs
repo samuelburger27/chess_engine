@@ -15,15 +15,15 @@
 //! [uci]: https://www.chessprogramming.org/UCI
 
 use std::io::BufRead;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::{
     chess_engine::{
         board::{Board, WHITE},
-        engine::search::{search_position, SearchLimits},
+        engine::search::{SearchLimits, search_position},
     },
     perft::perft_divide,
 };
