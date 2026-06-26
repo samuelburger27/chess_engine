@@ -16,7 +16,7 @@
 //! assert_eq!(Position::try_from("e4"), Ok(e4));
 //! ```
 
-use crate::chess_engine::{bitboard::Bitboard, r#const::EMPTY_BIT_B};
+use crate::chess_engine::{bitboard::Bitboard, constants::EMPTY_BIT_B};
 
 /// A single board square, stored as a `0..64` index.
 ///

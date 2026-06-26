@@ -22,7 +22,7 @@ use std::time::Instant;
 use crate::chess_engine::engine::evaluation::evaluate;
 use crate::chess_engine::piece::Piece;
 
-use super::super::{board::Board, r#move::Move, r#move::SpecialMove};
+use super::super::{board::Board, moves::Move, moves::SpecialMove};
 
 /// Score assigned to checkmate at the root; a mate `n` plies away scores
 /// `MATE_SCORE - n`, so faster mates are preferred.
@@ -104,10 +104,10 @@ impl SearchContext<'_> {
         if self.nodes.is_multiple_of(ABORT_CHECK_INTERVAL) {
             if self.stop.load(Ordering::Relaxed) {
                 self.aborted = true;
-            } else if let Some(deadline) = self.deadline {
-                if Instant::now() >= deadline {
-                    self.aborted = true;
-                }
+            } else if let Some(deadline) = self.deadline
+                && Instant::now() >= deadline
+            {
+                self.aborted = true;
             }
         }
         self.aborted

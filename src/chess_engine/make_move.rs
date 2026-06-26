@@ -16,16 +16,16 @@
 
 use crate::chess_engine::{
     bitboard::Bitboard,
-    board::{Board, Turn, BLACK, WHITE},
+    board::{BLACK, Board, Turn, WHITE},
     computed_boards::ZOBRIST_TABLE,
-    game_state::StateDelta,
-    piece::Piece,
-    position::Position,
-    r#const::{
+    constants::{
         B_KING_ROOK_START, B_KING_SIDE_BISHOP_START, B_QUEEN_ROOK_START, B_QUEEN_START, NORTH,
         SOUTH, W_KING_ROOK_START, W_KING_SIDE_BISHOP_START, W_QUEEN_ROOK_START, W_QUEEN_START,
     },
-    r#move::{Move, SpecialMove},
+    game_state::StateDelta,
+    moves::{Move, SpecialMove},
+    piece::Piece,
+    position::Position,
 };
 
 impl Board {
@@ -67,10 +67,10 @@ impl Board {
 
         // remove captured piece from bitboard and hash
         // en passant captures are handled in the match below
-        if move_.get_special_move() != SpecialMove::EnPassant {
-            if let Some(cap_piece) = captured_piece {
-                self.remove_piece(!self.turn, cap_piece, destination);
-            }
+        if move_.get_special_move() != SpecialMove::EnPassant
+            && let Some(cap_piece) = captured_piece
+        {
+            self.remove_piece(!self.turn, cap_piece, destination);
         }
 
         match move_.get_special_move() {

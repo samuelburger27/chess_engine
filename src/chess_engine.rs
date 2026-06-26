@@ -5,7 +5,7 @@
 //! how to [generate legal moves](board::Board::generate_moves), apply and undo
 //! them, and detect checks and draws. Supporting modules cover the value types
 //! the board is built from ([`bitboard::Bitboard`], [`position::Position`],
-//! [`piece::Piece`], [`castle_rights::CastleRights`], the `r#move::Move` type), the
+//! [`piece::Piece`], [`castle_rights::CastleRights`], the `moves::Move` type), the
 //! pre-computed attack tables ([`magic_tables`]), and the [`engine`] that picks
 //! the best move.
 //!
@@ -15,15 +15,15 @@ pub mod bitboard;
 pub mod board;
 pub mod castle_rights;
 mod computed_boards;
-mod r#const;
+mod constants;
 pub mod engine;
 mod fen_parser;
 mod game_state;
 pub mod magic_tables;
 mod make_move;
 mod masks;
-pub mod r#move;
 mod move_generation;
+pub mod moves;
 pub mod piece;
 pub mod position;
 pub mod utils;

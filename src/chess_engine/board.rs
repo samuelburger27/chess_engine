@@ -15,10 +15,10 @@
 
 use super::bitboard::Bitboard;
 use super::castle_rights::CastleRights;
+use super::constants::EMPTY_BIT_B;
 use super::game_state::StateDelta;
+use super::moves::Move;
 use super::position::Position;
-use super::r#const::EMPTY_BIT_B;
-use super::r#move::Move;
 use crate::chess_engine::{
     computed_boards::{
         BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, KING_RING_MOVES, KNIGHT_MOVES,
@@ -26,7 +26,7 @@ use crate::chess_engine::{
     },
     fen_parser::START_POS_FEN,
     masks::BLACK_SQUARES,
-    piece::{Piece, PIECE_COUNT},
+    piece::{PIECE_COUNT, Piece},
     zobrist::ZobristHash,
 };
 

@@ -17,7 +17,7 @@
 use crate::chess_engine::computed_boards::{
     BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS,
 };
-use crate::chess_engine::r#const::{
+use crate::chess_engine::constants::{
     B_KING_SIDE_BISHOP_START, B_KING_START, B_QUEEN_START, NORTH, NORTH_EAST, NORTH_WEST, SOUTH,
     SOUTH_EAST, SOUTH_WEST, W_KING_SIDE_BISHOP_START, W_KING_START, W_QUEEN_START,
 };
@@ -26,14 +26,14 @@ use super::bitboard::Bitboard;
 use super::board::{Board, Turn, WHITE};
 use super::computed_boards::{BETWEEN, BISHOP_RAYS, LINE, PAWN_ATTACKS, ROOK_RAYS};
 use super::computed_boards::{KING_RING_MOVES, KNIGHT_MOVES};
+use super::constants::EMPTY_BIT_B;
 use super::masks::{
     B_KING_CASTLE_EMPTY, B_QUEEN_CASTLE_EMPTY, NOT_A_FILE, NOT_H_FILE, RANK_1, RANK_2, RANK_7,
     RANK_8, W_KING_CASTLE_EMPTY, W_QUEEN_CASTLE_EMPTY,
 };
+use super::moves::{EN_PASSANT, Move, SpecialMove};
 use super::piece::Piece;
 use super::position::Position;
-use super::r#const::EMPTY_BIT_B;
-use super::r#move::{Move, SpecialMove, EN_PASSANT};
 
 impl Board {
     /// Returns every fully legal move for `turn` in this position.

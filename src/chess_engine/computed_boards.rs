@@ -11,10 +11,10 @@
 use std::sync::LazyLock;
 
 use crate::chess_engine::{
+    constants::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
     magic_tables::MagicEntry,
     move_generation::get_sliding_moves,
     position::Position,
-    r#const::{BISHOP_DELTAS, EMPTY_BIT_B, ROOK_DELTAS},
     zobrist::ZobristTable,
 };
 
