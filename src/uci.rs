@@ -141,7 +141,9 @@ fn handle_setoption(parts: &[&str], state: &mut EngineState) {
     if let Some(name_idx) = parts.iter().position(|&p| p == "name")
         && let Some(value_idx) = parts.iter().position(|&p| p == "value")
         && parts.get(name_idx + 1) == Some(&"Threads")
-        && let Some(value) = parts.get(value_idx + 1).and_then(|v| v.parse::<usize>().ok())
+        && let Some(value) = parts
+            .get(value_idx + 1)
+            .and_then(|v| v.parse::<usize>().ok())
     {
         state.threads = value.clamp(1, MAX_THREADS);
     }

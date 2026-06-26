@@ -204,7 +204,14 @@ pub fn search_position(
             let mut ctx = make_ctx(i as u64);
             let start_depth = if i % 2 == 0 { 1 } else { 2 };
             scope.spawn(move || {
-                run_iterative(&mut helper_board, limits, &mut ctx, start, false, start_depth);
+                run_iterative(
+                    &mut helper_board,
+                    limits,
+                    &mut ctx,
+                    start,
+                    false,
+                    start_depth,
+                );
             });
         }
 
@@ -505,7 +512,12 @@ const TT_MOVE_SCORE: i32 = 1_000_000;
 fn order_moves(board: &Board, moves: &mut [Move], tt_move: Option<Move>, noise: u64) {
     let mut scored: Vec<(i32, Move)> = moves
         .iter()
-        .map(|&mv| (move_order_score(board, mv, tt_move) + order_jitter(noise, mv), mv))
+        .map(|&mv| {
+            (
+                move_order_score(board, mv, tt_move) + order_jitter(noise, mv),
+                mv,
+            )
+        })
         .collect();
     scored.sort_by_key(|(score, _)| -*score);
     for (slot, (_, mv)) in moves.iter_mut().zip(scored) {
