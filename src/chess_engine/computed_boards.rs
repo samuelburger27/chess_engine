@@ -30,6 +30,12 @@ pub const KING_RING_MOVES: [Bitboard; Position::MAX_POS] = generate_king_ring_mo
 /// `square`, which is what attack detection needs.
 pub const PAWN_ATTACKS: [[Bitboard; Position::MAX_POS]; 2] = generate_pawn_attacks();
 
+/// Passed-pawn masks indexed by `[colour][square]` (white = 0, black = 1): the
+/// squares strictly ahead of a pawn of that colour on its own and the adjacent
+/// files. A pawn is *passed* when no enemy pawn is in its mask. Also used for
+/// the king's pawn shield (intersected with the rank in front of the king).
+pub const PASSED_PAWN_MASKS: [[Bitboard; Position::MAX_POS]; 2] = generate_passed_pawn_masks();
+
 /// All squares sharing a rank or file with the indexed square (the square itself
 /// excluded). Used to find enemy rooks/queens aligned with the king.
 pub const ROOK_RAYS: [Bitboard; Position::MAX_POS] = generate_rook_rays();
@@ -92,6 +98,34 @@ fn generate_slide_piece_attack_tables(
         }
     }
     table
+}
+
+/// Builds the passed-pawn masks: for each colour and square, every square on
+/// the own or an adjacent file whose rank is strictly ahead of the square
+/// (higher ranks for White, lower for Black).
+const fn generate_passed_pawn_masks() -> [[Bitboard; Position::MAX_POS]; 2] {
+    let mut masks = [[EMPTY_BIT_B; Position::MAX_POS]; 2];
+    let mut square = 0;
+    while square < Position::MAX_POS {
+        let file = square % 8;
+        let rank = square / 8;
+        let mut other = 0;
+        while other < Position::MAX_POS {
+            let other_file = other % 8;
+            let other_rank = other / 8;
+            if other_file.abs_diff(file) <= 1 {
+                if other_rank > rank {
+                    masks[0][square].0 |= 1u64 << other; // ahead for White
+                }
+                if other_rank < rank {
+                    masks[1][square].0 |= 1u64 << other; // ahead for Black
+                }
+            }
+            other += 1;
+        }
+        square += 1;
+    }
+    masks
 }
 
 /// Builds the relevant-blocker mask for each square: the squares a slider's
@@ -517,3 +551,41 @@ pub const ROOK_MAGICS: &[MagicEntry; Position::MAX_POS] = &[
 ];
 /// Number of entries in [`ROOK_ATTACKS`] (sum of all per-square block sizes).
 pub const ROOK_TABLE_SIZE: usize = 102_400;
+
+#[cfg(test)]
+mod tests {
+    use super::PASSED_PAWN_MASKS;
+    use crate::chess_engine::masks::{ADJACENT_FILE_MASKS, FILE_MASKS, RANK_MASKS};
+
+    #[test]
+    fn passed_pawn_mask_covers_front_span() {
+        // white pawn on e4 (square 28): files d–f, ranks 5–8 = 12 squares
+        let mask = PASSED_PAWN_MASKS[0][28];
+        assert_eq!(mask.count_bits(), 12);
+        assert!(mask.is_square_set(35)); // d5
+        assert!(mask.is_square_set(52)); // e7
+        assert!(!mask.is_square_set(20)); // e3, behind
+        assert!(!mask.is_square_set(34)); // c5, too far left
+    }
+
+    #[test]
+    fn passed_pawn_mask_does_not_wrap_at_edges() {
+        // white pawn on a2 (square 8): files a–b only, ranks 3–8 = 12 squares
+        let mask = PASSED_PAWN_MASKS[0][8];
+        assert_eq!(mask.count_bits(), 12);
+        assert!(!mask.is_square_set(23)); // h3 must not leak in
+        // black pawn on h7 (square 55): files g–h, ranks 1–6 = 12 squares
+        let mask = PASSED_PAWN_MASKS[1][55];
+        assert_eq!(mask.count_bits(), 12);
+        assert!(mask.is_square_set(46)); // g6, ahead for black
+        assert!(!mask.is_square_set(40)); // a6 must not leak in
+    }
+
+    #[test]
+    fn file_and_adjacent_masks_line_up() {
+        assert_eq!(ADJACENT_FILE_MASKS[0], FILE_MASKS[1]);
+        assert_eq!(ADJACENT_FILE_MASKS[7], FILE_MASKS[6]);
+        assert_eq!(ADJACENT_FILE_MASKS[4], FILE_MASKS[3] | FILE_MASKS[5]);
+        assert_eq!((FILE_MASKS[2] & RANK_MASKS[3]).trailing_zeros(), 26); // c4
+    }
+}
