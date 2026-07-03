@@ -4,8 +4,12 @@
 //! depth 1, then 2, and so on — over a fail-soft [negamax] with alpha-beta
 //! pruning. At the leaves a quiescence search resolves pending
 //! captures and promotions so the static [evaluation](super::evaluation) is only
-//! applied to quiet positions. Moves are ordered (promotions and MVV-LVA
-//! captures first) to make alpha-beta prune more. Draws (fifty-move rule,
+//! applied to quiet positions; hopeless captures there are skipped by *delta
+//! pruning*. Moves are ordered to make alpha-beta prune more: the
+//! transposition-table move, promotions and MVV-LVA captures, then quiet moves
+//! led by the *killer moves* (quiet refutations of sibling nodes) and ranked by
+//! the *history heuristic* (how often a move's origin→destination caused
+//! cutoffs). Draws (fifty-move rule,
 //! repetition, insufficient material) score `0`, and mates are encoded as
 //! `MATE_SCORE - ply` so that shorter mates score higher.
 //!
@@ -89,7 +93,8 @@ pub struct SearchResult {
 
 /// Mutable state threaded through the recursive search: the stop signal, the
 /// deadline, this worker's local node count, the shared cross-thread node total,
-/// the transposition table, and whether an abort has been requested.
+/// the transposition table, the quiet-move ordering heuristics, and whether an
+/// abort has been requested.
 struct SearchContext<'a> {
     stop: &'a AtomicBool,
     deadline: Option<Instant>,
@@ -103,6 +108,12 @@ struct SearchContext<'a> {
     /// Lazy SMP helpers explore divergent trees. `0` (the main worker) keeps the
     /// clean, deterministic order.
     order_noise: u64,
+    /// Killer moves: per ply, the last two quiet moves that caused a beta
+    /// cutoff. Quiet moves that refuted a sibling often refute here too.
+    killers: [[Option<Move>; 2]; MAX_DEPTH as usize],
+    /// History heuristic: for each (origin, destination) pair, how often quiet
+    /// moves with that geometry caused beta cutoffs, weighted by depth².
+    history: Box<[[i32; 64]; 64]>,
 }
 
 impl SearchContext<'_> {
@@ -123,6 +134,20 @@ impl SearchContext<'_> {
             }
         }
         self.aborted
+    }
+
+    /// Records a quiet move that caused a beta cutoff: it becomes the ply's
+    /// first killer, and its origin→destination history weight grows by depth²
+    /// (deeper refutations are stronger evidence).
+    fn record_quiet_cutoff(&mut self, mv: Move, ply: u8, depth: u8) {
+        let slot = &mut self.killers[usize::from(ply)];
+        if slot[0] != Some(mv) {
+            slot[1] = slot[0];
+            slot[0] = Some(mv);
+        }
+        let (origin, dest) = mv.get_org_and_dest();
+        let entry = &mut self.history[origin.as_usize()][dest.as_usize()];
+        *entry = (*entry + i32::from(depth) * i32::from(depth)).min(MAX_HISTORY_SCORE);
     }
 }
 
@@ -189,6 +214,8 @@ pub fn search_position(
         tt,
         shared_nodes: &shared_nodes,
         order_noise,
+        killers: [[None; 2]; MAX_DEPTH as usize],
+        history: Box::new([[0; 64]; 64]),
     };
 
     if threads <= 1 {
@@ -362,7 +389,15 @@ fn negamax(
             0 // stalemate
         };
     }
-    order_moves(board, &mut moves, tt_move, ctx.order_noise);
+    let ply_killers = ctx.killers[usize::from(ply)];
+    order_moves(
+        board,
+        &mut moves,
+        tt_move,
+        ctx.order_noise,
+        ply_killers,
+        &ctx.history,
+    );
 
     let alpha_orig = alpha;
     let mut best_score = -INFINITY;
@@ -388,6 +423,11 @@ fn negamax(
             pv.append(&mut child_pv);
         }
         if alpha >= beta {
+            // quiet moves that refute the position feed the killer/history
+            // ordering heuristics
+            if !is_tactical(board, mv) {
+                ctx.record_quiet_cutoff(mv, ply, depth);
+            }
             break; // beta cutoff
         }
     }
@@ -455,9 +495,32 @@ fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchCont
         .into_iter()
         .filter(|&m| is_tactical(board, m))
         .collect();
-    order_moves(board, &mut moves, None, ctx.order_noise);
+    order_moves(
+        board,
+        &mut moves,
+        None,
+        ctx.order_noise,
+        [None; 2],
+        &ctx.history,
+    );
 
     for mv in moves {
+        // Delta pruning: when even winning the victim plus a safety margin
+        // cannot lift alpha, the capture is hopeless — skip it. Promotions are
+        // exempt (they gain a queen's worth of material on top of the victim).
+        let victim = match mv.get_special_move() {
+            SpecialMove::NormalMove => {
+                Some(board.get_piece_type_containing_position(mv.get_dest()))
+            }
+            SpecialMove::EnPassant => Some(Piece::Pawn),
+            SpecialMove::Promotion | SpecialMove::Castle => None,
+        };
+        if let Some(victim) = victim
+            && stand_pat + piece_value(victim) + DELTA_MARGIN <= alpha
+        {
+            continue;
+        }
+
         board.commit_verified_move(mv);
         let score = -quiescence(board, -beta, -alpha, ctx);
         board.unmake_move();
@@ -503,18 +566,37 @@ const fn piece_value(piece: Piece) -> i32 {
 
 /// Score given to the transposition-table move so it is always searched first.
 const TT_MOVE_SCORE: i32 = 1_000_000;
+/// Ordering score of a ply's first killer move: below every capture, above all
+/// other quiet moves.
+const KILLER_0_SCORE: i32 = 4_000;
+/// Ordering score of a ply's second killer move.
+const KILLER_1_SCORE: i32 = 3_900;
+/// Cap on a history entry, chosen so that a history-boosted quiet move (plus
+/// the Lazy SMP jitter) can never outrank a killer.
+const MAX_HISTORY_SCORE: i32 = 3_000;
+/// Safety margin for delta pruning in the quiescence search: a capture is
+/// skipped when winning the victim plus this margin still cannot lift alpha.
+const DELTA_MARGIN: i32 = 200;
 
 /// Order moves so the most forcing ones are searched first: the
 /// transposition-table move, then promotions and captures (MVV-LVA: most
-/// valuable victim, least valuable attacker), then quiet moves. A non-zero
-/// `noise` seed perturbs the order of equal-ranked (quiet) moves so Lazy SMP
-/// helpers diverge.
-fn order_moves(board: &Board, moves: &mut [Move], tt_move: Option<Move>, noise: u64) {
+/// valuable victim, least valuable attacker), then the ply's killer moves,
+/// then the remaining quiet moves by history score. A non-zero `noise` seed
+/// perturbs the order of equal-ranked (quiet) moves so Lazy SMP helpers
+/// diverge.
+fn order_moves(
+    board: &Board,
+    moves: &mut [Move],
+    tt_move: Option<Move>,
+    noise: u64,
+    killers: [Option<Move>; 2],
+    history: &[[i32; 64]; 64],
+) {
     let mut scored: Vec<(i32, Move)> = moves
         .iter()
         .map(|&mv| {
             (
-                move_order_score(board, mv, tt_move) + order_jitter(noise, mv),
+                move_order_score(board, mv, tt_move, killers, history) + order_jitter(noise, mv),
                 mv,
             )
         })
@@ -540,8 +622,15 @@ fn order_jitter(noise: u64, mv: Move) -> i32 {
 
 /// Heuristic ordering score for a single move: the transposition-table move
 /// highest, then promotions, then captures by MVV-LVA (victim value weighted
-/// above attacker value), then quiet moves at `0`.
-fn move_order_score(board: &Board, mv: Move, tt_move: Option<Move>) -> i32 {
+/// above attacker value), then the killer moves, then the remaining quiet
+/// moves by their history score.
+fn move_order_score(
+    board: &Board,
+    mv: Move,
+    tt_move: Option<Move>,
+    killers: [Option<Move>; 2],
+    history: &[[i32; 64]; 64],
+) -> i32 {
     if tt_move == Some(mv) {
         return TT_MOVE_SCORE;
     }
@@ -559,6 +648,16 @@ fn move_order_score(board: &Board, mv: Move, tt_move: Option<Move>) -> i32 {
     if victim != Piece::None {
         let attacker = board.get_piece_type_containing_position(mv.get_origin());
         score += 8_000 + piece_value(victim) * 10 - piece_value(attacker);
+    } else if score == 0 {
+        // a quiet move (no capture, no promotion): killers first, then history
+        if killers[0] == Some(mv) {
+            return KILLER_0_SCORE;
+        }
+        if killers[1] == Some(mv) {
+            return KILLER_1_SCORE;
+        }
+        let (origin, dest) = mv.get_org_and_dest();
+        score = history[origin.as_usize()][dest.as_usize()];
     }
     score
 }
