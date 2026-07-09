@@ -373,9 +373,9 @@ fn side_features(board: &Board, color: Turn) -> (i32, i32) {
         .trailing_zeros();
     let king_rank = king_sq / 8;
     let front_rank = if color == WHITE {
-        (king_rank <= 1).then_some(king_rank + 1)
+        (king_rank <= 1).then(|| king_rank + 1)
     } else {
-        (king_rank >= 6).then_some(king_rank - 1)
+        (king_rank >= 6).then(|| king_rank - 1)
     };
     if let Some(front_rank) = front_rank {
         let shield = PASSED_PAWN_MASKS[usize::from(color)][king_sq] & RANK_MASKS[front_rank];
