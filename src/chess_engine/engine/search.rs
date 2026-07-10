@@ -20,6 +20,7 @@
 //!
 //! [negamax]: https://www.chessprogramming.org/Negamax
 
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -168,14 +169,19 @@ impl SearchContext<'_> {
 /// ```
 #[must_use]
 pub fn find_best_move(board: &Board, depth: u8) -> SearchResult {
+    /// A process-wide table reused across `find_best_move` calls, so repeated
+    /// fixed-depth searches (e.g. the WAC suite's 300 positions) don't each
+    /// allocate and zero a fresh 64 MiB table. Cleared at the start of every
+    /// call to keep each search self-contained and deterministic.
+    static TT: LazyLock<TranspositionTable> = LazyLock::new(TranspositionTable::new);
+
     let stop = AtomicBool::new(false);
-    // No shared table here, so allocate a private one for this search.
-    let tt = TranspositionTable::new();
+    TT.clear();
     search_position(
         &mut board.clone(),
         SearchLimits::depth(depth),
         &stop,
-        &tt,
+        &TT,
         1,
         false,
     )
