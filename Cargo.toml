@@ -21,3 +21,8 @@ perf = { level = "deny", priority = -1 }
 [profile.release]
 lto = "fat"
 codegen-units = 1
+
+# Optimize test builds so the perft and WAC suites run at release-like speed
+# without needing `cargo test --release`.
+[profile.test]
+opt-level = 3
