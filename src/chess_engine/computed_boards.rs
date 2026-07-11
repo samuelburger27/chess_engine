@@ -71,6 +71,18 @@ pub static ROOK_ATTACKS: LazyLock<Vec<Bitboard>> = LazyLock::new(|| {
 /// The single shared Zobrist table (fixed seed so hashes are reproducible).
 pub static ZOBRIST_TABLE: LazyLock<ZobristTable> = LazyLock::new(|| ZobristTable::new(Some(1234)));
 
+/// Squares a bishop on `sq` attacks under `occupancy`, via the magic tables.
+pub fn bishop_attacks(sq: usize, occupancy: Bitboard) -> Bitboard {
+    let entry = BISHOP_MAGICS[sq];
+    BISHOP_ATTACKS[entry.magic_index(occupancy & BISHOP_BLOCKERS[sq]) + entry.offset]
+}
+
+/// Squares a rook on `sq` attacks under `occupancy`, via the magic tables.
+pub fn rook_attacks(sq: usize, occupancy: Bitboard) -> Bitboard {
+    let entry = ROOK_MAGICS[sq];
+    ROOK_ATTACKS[entry.magic_index(occupancy & ROOK_BLOCKERS[sq]) + entry.offset]
+}
+
 /// Fills a slider's attack table: for every square, enumerates all blocker
 /// subsets (Carry-Rippler) and stores the reachable squares at the magic index.
 #[allow(clippy::trivially_copy_pass_by_ref)]

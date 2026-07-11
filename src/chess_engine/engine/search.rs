@@ -2,10 +2,20 @@
 //!
 //! The driver, [`search_position`], runs *iterative deepening* — it searches to
 //! depth 1, then 2, and so on — over a fail-soft [negamax] with alpha-beta
-//! pruning. At the leaves a quiescence search resolves pending
+//! pruning. Each iteration opens an *aspiration window* around the previous
+//! score, widening it on a fail. Inside the tree the search prunes and reduces:
+//! *null-move pruning* (a reduced search after passing the turn that still
+//! fails high cuts the node), *principal variation search* (only the first
+//! move gets a full window; the rest are probed with a zero-width window), and
+//! *late move reductions* (late quiet moves are probed a ply shallower and
+//! re-searched only on a fail-high). A node in check is extended one ply.
+//!
+//! At the leaves a quiescence search resolves pending
 //! captures and promotions so the static [evaluation](super::evaluation) is only
-//! applied to quiet positions; hopeless captures there are skipped by *delta
-//! pruning*. Moves are ordered to make alpha-beta prune more: the
+//! applied to quiet positions; while in check it searches every evasion
+//! instead, and hopeless captures are skipped by *delta pruning* and a
+//! negative *static exchange evaluation* ([`see`]). Moves are ordered to make
+//! alpha-beta prune more: the
 //! transposition-table move, promotions and MVV-LVA captures, then quiet moves
 //! led by the *killer moves* (quiet refutations of sibling nodes) and ranked by
 //! the *history heuristic* (how often a move's origin→destination caused
@@ -24,6 +34,12 @@ use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
+use crate::chess_engine::bitboard::Bitboard;
+use crate::chess_engine::board::{BLACK, Turn, WHITE};
+use crate::chess_engine::computed_boards::{
+    BISHOP_ATTACKS, BISHOP_BLOCKERS, BISHOP_MAGICS, KING_RING_MOVES, KNIGHT_MOVES, PAWN_ATTACKS,
+    ROOK_ATTACKS, ROOK_BLOCKERS, ROOK_MAGICS,
+};
 use crate::chess_engine::engine::evaluation::evaluate;
 use crate::chess_engine::engine::transposition::{Bound, TranspositionTable};
 use crate::chess_engine::piece::Piece;
@@ -40,8 +56,28 @@ const INFINITY: i32 = i32::MAX - 1;
 /// How often (in nodes) the abort conditions are polled.
 const ABORT_CHECK_INTERVAL: u64 = 2048;
 
+/// Minimum depth at which null-move pruning is tried.
+const NULL_MOVE_MIN_DEPTH: u8 = 3;
+/// Minimum depth at which late move reductions apply.
+const LMR_MIN_DEPTH: u8 = 3;
+/// Number of moves searched at full depth before reductions kick in.
+const LMR_MIN_MOVE_INDEX: usize = 3;
+/// Half-width of the initial aspiration window around the previous
+/// iteration's score.
+const ASPIRATION_WINDOW: i32 = 40;
+/// Iteration depth from which aspiration windows are used (earlier scores are
+/// too unstable to centre a narrow window on).
+const ASPIRATION_MIN_DEPTH: u8 = 4;
+/// Once the window has been widened past this margin, re-search with the full
+/// window instead of widening again.
+const ASPIRATION_MAX_MARGIN: i32 = 640;
+
 /// Maximum iterative-deepening depth the search will attempt.
 pub const MAX_DEPTH: u8 = 64;
+
+/// Hard cap on the distance from the root, including check extensions; a node
+/// this deep returns its static evaluation instead of recursing further.
+const MAX_PLY: usize = 128;
 
 /// The conditions under which a search stops.
 #[derive(Debug, Clone, Copy)]
@@ -111,7 +147,7 @@ struct SearchContext<'a> {
     order_noise: u64,
     /// Killer moves: per ply, the last two quiet moves that caused a beta
     /// cutoff. Quiet moves that refuted a sibling often refute here too.
-    killers: [[Option<Move>; 2]; MAX_DEPTH as usize],
+    killers: [[Option<Move>; 2]; MAX_PLY],
     /// History heuristic: for each (origin, destination) pair, how often quiet
     /// moves with that geometry caused beta cutoffs, weighted by depth².
     history: Box<[[i32; 64]; 64]>,
@@ -220,7 +256,7 @@ pub fn search_position(
         tt,
         shared_nodes: &shared_nodes,
         order_noise,
-        killers: [[None; 2]; MAX_DEPTH as usize],
+        killers: [[None; 2]; MAX_PLY],
         history: Box::new([[0; 64]; 64]),
     };
 
@@ -276,12 +312,43 @@ fn run_iterative(
         pv: Vec::new(),
     };
 
+    let mut prev_score = 0;
     for depth in start_depth..=limits.depth.max(start_depth) {
         let mut pv = Vec::new();
-        let score = negamax(board, depth, 0, -INFINITY, INFINITY, ctx, &mut pv);
+
+        // Aspiration window: centre a narrow window on the last iteration's
+        // score; on a fail outside it, widen the failing side and re-search.
+        let mut margin = ASPIRATION_WINDOW;
+        let (mut alpha, mut beta) = if depth >= ASPIRATION_MIN_DEPTH {
+            (prev_score - margin, prev_score + margin)
+        } else {
+            (-INFINITY, INFINITY)
+        };
+        let score = loop {
+            pv.clear();
+            let score = negamax(board, depth, 0, alpha, beta, true, ctx, &mut pv);
+            if ctx.aborted || (score > alpha && score < beta) {
+                break score;
+            }
+            margin = margin.saturating_mul(4);
+            if score <= alpha {
+                alpha = if margin > ASPIRATION_MAX_MARGIN {
+                    -INFINITY
+                } else {
+                    score - margin
+                };
+            } else {
+                beta = if margin > ASPIRATION_MAX_MARGIN {
+                    INFINITY
+                } else {
+                    score + margin
+                };
+            }
+        };
         if ctx.aborted {
             break;
         }
+        prev_score = score;
 
         result = SearchResult {
             best_move: pv.first().copied(),
@@ -339,13 +406,21 @@ fn print_info(result: &SearchResult, start: Instant) {
 
 /// Negamax with alpha-beta pruning (fail-soft). Returns the score from the
 /// perspective of the side to move; `pv` receives the principal variation.
-#[allow(clippy::cast_possible_truncation)]
+///
+/// `null_allowed` gates null-move pruning so two null moves are never played
+/// in a row (the null search itself passes `false`).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::too_many_arguments,
+    clippy::too_many_lines
+)]
 fn negamax(
     board: &mut Board,
     depth: u8,
     ply: u8,
     mut alpha: i32,
     beta: i32,
+    null_allowed: bool,
     ctx: &mut SearchContext,
     pv: &mut Vec<Move>,
 ) -> i32 {
@@ -364,8 +439,17 @@ fn negamax(
         return 0;
     }
 
+    if usize::from(ply) >= MAX_PLY {
+        return evaluate(board);
+    }
+
+    let in_check = board.in_check(board.turn);
+    // Check extension: never drop into quiescence (or shed depth) while in
+    // check — evasions are forced and the tactics are still unresolved.
+    let depth = if in_check { depth + 1 } else { depth };
+
     if depth == 0 {
-        return quiescence(board, alpha, beta, ctx);
+        return quiescence(board, ply, alpha, beta, ctx);
     }
 
     // Transposition-table probe. A sufficiently deep entry can cut the node off
@@ -386,9 +470,43 @@ fn negamax(
     }
     let tt_move = tt_entry.and_then(|entry| entry.mv);
 
+    // Null-move pruning: if passing the turn (a move worse than every real
+    // move, zugzwang aside) still fails high on a reduced search, the real
+    // search would too — cut off. Skipped in check (the null move would be
+    // illegal), near mate scores, and without non-pawn material (zugzwang).
+    if null_allowed
+        && ply > 0
+        && depth >= NULL_MOVE_MIN_DEPTH
+        && !in_check
+        && beta.abs() < MATE_THRESHOLD
+        && has_non_pawn_material(board)
+    {
+        let r = if depth >= 6 { 3 } else { 2 };
+        board.make_null_move();
+        let mut null_pv = Vec::new();
+        let score = -negamax(
+            board,
+            depth - 1 - r,
+            ply + 1,
+            -beta,
+            -beta + 1,
+            false,
+            ctx,
+            &mut null_pv,
+        );
+        board.unmake_null_move();
+        if ctx.aborted {
+            return 0;
+        }
+        if score >= beta {
+            // a mate score from the reduced null search is unproven
+            return if score >= MATE_THRESHOLD { beta } else { score };
+        }
+    }
+
     let mut moves = board.generate_moves(board.turn);
     if moves.is_empty() {
-        return if board.in_check(board.turn) {
+        return if in_check {
             // mated: worse the closer to the root it happens
             -(MATE_SCORE - i32::from(ply))
         } else {
@@ -408,10 +526,77 @@ fn negamax(
     let alpha_orig = alpha;
     let mut best_score = -INFINITY;
     let mut best_move: Option<Move> = None;
-    for mv in moves {
+    for (move_index, mv) in moves.into_iter().enumerate() {
+        let quiet = !is_tactical(board, mv);
         board.commit_verified_move(mv);
         let mut child_pv = Vec::new();
-        let score = -negamax(board, depth - 1, ply + 1, -beta, -alpha, ctx, &mut child_pv);
+
+        // Principal variation search: only the first move gets the full
+        // window; the rest are probed with a zero-width window and re-searched
+        // only when they beat alpha (a rare event with good move ordering).
+        let score = if move_index == 0 {
+            -negamax(
+                board,
+                depth - 1,
+                ply + 1,
+                -beta,
+                -alpha,
+                true,
+                ctx,
+                &mut child_pv,
+            )
+        } else {
+            // Late move reduction: late quiet moves that neither escape nor
+            // give check (and aren't killers) are probed a ply shallower.
+            let reduce = quiet
+                && depth >= LMR_MIN_DEPTH
+                && move_index >= LMR_MIN_MOVE_INDEX
+                && !in_check
+                && ply_killers[0] != Some(mv)
+                && ply_killers[1] != Some(mv)
+                && !board.in_check(board.turn);
+            let probe_depth = if reduce { depth - 2 } else { depth - 1 };
+
+            let mut score = -negamax(
+                board,
+                probe_depth,
+                ply + 1,
+                -alpha - 1,
+                -alpha,
+                true,
+                ctx,
+                &mut child_pv,
+            );
+            // the reduced probe failed high: verify at full depth
+            if reduce && score > alpha && !ctx.aborted {
+                child_pv.clear();
+                score = -negamax(
+                    board,
+                    depth - 1,
+                    ply + 1,
+                    -alpha - 1,
+                    -alpha,
+                    true,
+                    ctx,
+                    &mut child_pv,
+                );
+            }
+            // inside the window: re-search with the full window for an exact score
+            if score > alpha && score < beta && !ctx.aborted {
+                child_pv.clear();
+                score = -negamax(
+                    board,
+                    depth - 1,
+                    ply + 1,
+                    -beta,
+                    -alpha,
+                    true,
+                    ctx,
+                    &mut child_pv,
+                );
+            }
+            score
+        };
         board.unmake_move();
 
         if ctx.aborted {
@@ -431,7 +616,7 @@ fn negamax(
         if alpha >= beta {
             // quiet moves that refute the position feed the killer/history
             // ordering heuristics
-            if !is_tactical(board, mv) {
+            if quiet {
                 ctx.record_quiet_cutoff(mv, ply, depth);
             }
             break; // beta cutoff
@@ -482,68 +667,273 @@ fn score_to_tt(score: i32, ply: u8) -> i32 {
 }
 
 /// Quiescence search: extend the search through captures and promotions so
-/// that the static evaluation is only applied to quiet positions.
-fn quiescence(board: &mut Board, mut alpha: i32, beta: i32, ctx: &mut SearchContext) -> i32 {
+/// that the static evaluation is only applied to quiet positions. Hopeless
+/// captures are skipped by delta pruning and by a negative static exchange
+/// evaluation ([`see`]).
+///
+/// When the side to move is in check, standing pat on the static evaluation
+/// would be meaningless (the position is not quiet, and the eval knows nothing
+/// about the attack), so *all* evasions are searched instead, and a position
+/// with none is mate — `ply` keeps the mate score root-relative.
+#[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
+fn quiescence(
+    board: &mut Board,
+    ply: u8,
+    mut alpha: i32,
+    beta: i32,
+    ctx: &mut SearchContext,
+) -> i32 {
     if ctx.count_node_and_check_abort() {
         return 0;
     }
 
-    let stand_pat = evaluate(board);
-    if stand_pat >= beta {
-        return beta;
+    // Transposition-table probe: an entry of any depth is at least as informed
+    // as this quiescence node, so the usual bound checks can cut off.
+    let tt_entry = ctx.tt.probe(board.zobrist_key);
+    if let Some(entry) = tt_entry {
+        let score = score_from_tt(entry.score, ply);
+        match entry.bound {
+            Bound::Exact => return score,
+            Bound::Lower if score >= beta => return score,
+            Bound::Upper if score <= alpha => return score,
+            _ => {}
+        }
     }
-    if stand_pat > alpha {
-        alpha = stand_pat;
+    let tt_move = tt_entry.and_then(|entry| entry.mv);
+
+    let in_check = board.in_check(board.turn);
+    let alpha_orig = alpha;
+    let mut best_score = -INFINITY;
+    let mut stand_pat = -INFINITY;
+
+    if !in_check {
+        stand_pat = evaluate(board);
+        if stand_pat >= beta {
+            return stand_pat;
+        }
+        best_score = stand_pat;
+        if stand_pat > alpha {
+            alpha = stand_pat;
+        }
     }
 
-    let mut moves: Vec<Move> = board
-        .generate_moves(board.turn)
-        .into_iter()
-        .filter(|&m| is_tactical(board, m))
-        .collect();
+    let mut moves = board.generate_moves(board.turn);
+    if in_check {
+        // every evasion is searched: the position stays tactical until the
+        // check is resolved
+        if moves.is_empty() {
+            return -(MATE_SCORE - i32::from(ply));
+        }
+    } else {
+        moves.retain(|&m| is_tactical(board, m));
+    }
     order_moves(
         board,
         &mut moves,
-        None,
+        tt_move,
         ctx.order_noise,
         [None; 2],
         &ctx.history,
     );
 
+    let mut best_move: Option<Move> = None;
     for mv in moves {
-        // Delta pruning: when even winning the victim plus a safety margin
-        // cannot lift alpha, the capture is hopeless — skip it. Promotions are
-        // exempt (they gain a queen's worth of material on top of the victim).
-        let victim = match mv.get_special_move() {
-            SpecialMove::NormalMove => {
-                Some(board.get_piece_type_containing_position(mv.get_dest()))
+        if !in_check {
+            // Delta pruning: when even winning the victim plus a safety margin
+            // cannot lift alpha, the capture is hopeless — skip it. Promotions
+            // are exempt (they gain a queen's worth of material on top of the
+            // victim).
+            let victim = match mv.get_special_move() {
+                SpecialMove::NormalMove => {
+                    Some(board.get_piece_type_containing_position(mv.get_dest()))
+                }
+                SpecialMove::EnPassant => Some(Piece::Pawn),
+                SpecialMove::Promotion | SpecialMove::Castle => None,
+            };
+            if let Some(victim) = victim
+                && stand_pat + piece_value(victim) + DELTA_MARGIN <= alpha
+            {
+                continue;
             }
-            SpecialMove::EnPassant => Some(Piece::Pawn),
-            SpecialMove::Promotion | SpecialMove::Castle => None,
-        };
-        if let Some(victim) = victim
-            && stand_pat + piece_value(victim) + DELTA_MARGIN <= alpha
-        {
-            continue;
+
+            // SEE pruning: a capture that loses material against best defence
+            // cannot rescue a position where standing pat already failed low
+            if mv.get_special_move() == SpecialMove::NormalMove && see(board, mv) < 0 {
+                continue;
+            }
         }
 
         board.commit_verified_move(mv);
-        let score = -quiescence(board, -beta, -alpha, ctx);
+        let score = -quiescence(board, ply + 1, -beta, -alpha, ctx);
         board.unmake_move();
 
         if ctx.aborted {
             return 0;
         }
 
-        if score >= beta {
-            return beta;
+        if score > best_score {
+            best_score = score;
+            best_move = Some(mv);
         }
         if score > alpha {
             alpha = score;
         }
+        if alpha >= beta {
+            break;
+        }
     }
 
-    alpha
+    let bound = if best_score <= alpha_orig {
+        Bound::Upper
+    } else if best_score >= beta {
+        Bound::Lower
+    } else {
+        Bound::Exact
+    };
+    ctx.tt.store(
+        board.zobrist_key,
+        best_move,
+        score_to_tt(best_score, ply) as i16,
+        0,
+        bound,
+    );
+
+    best_score
+}
+
+/// Returns `true` if the side to move has any piece besides pawns and the
+/// king. Null-move pruning is unsound without one: pawn/king endgames are
+/// where zugzwang (every move loses) is common.
+fn has_non_pawn_material(board: &Board) -> bool {
+    (board.get_piece_bitboard(Piece::Knight, board.turn)
+        | board.get_piece_bitboard(Piece::Bishop, board.turn)
+        | board.get_piece_bitboard(Piece::Rook, board.turn)
+        | board.get_piece_bitboard(Piece::Queen, board.turn))
+    .is_not_empty()
+}
+
+/// Bitboard of every piece of *either* colour attacking `sq` under the given
+/// `occupancy` (which may differ from the board's as an exchange strips
+/// pieces, revealing x-ray attackers). Mirrors the projection trick of
+/// [`Board::is_square_attacked_occ`], but collects the attackers instead of
+/// testing for one.
+fn attackers_to(board: &Board, sq: usize, occupancy: Bitboard) -> Bitboard {
+    // a white pawn attacks sq from the squares a black pawn on sq would attack
+    let pawns = (PAWN_ATTACKS[usize::from(BLACK)][sq]
+        & board.get_piece_bitboard(Piece::Pawn, WHITE))
+        | (PAWN_ATTACKS[usize::from(WHITE)][sq] & board.get_piece_bitboard(Piece::Pawn, BLACK));
+
+    let knights = KNIGHT_MOVES[sq]
+        & (board.get_piece_bitboard(Piece::Knight, WHITE)
+            | board.get_piece_bitboard(Piece::Knight, BLACK));
+    let kings = KING_RING_MOVES[sq]
+        & (board.get_piece_bitboard(Piece::King, WHITE)
+            | board.get_piece_bitboard(Piece::King, BLACK));
+
+    let queens = board.get_piece_bitboard(Piece::Queen, WHITE)
+        | board.get_piece_bitboard(Piece::Queen, BLACK);
+
+    let bishop_entry = BISHOP_MAGICS[sq];
+    let bishop_attacks = BISHOP_ATTACKS
+        [bishop_entry.magic_index(occupancy & BISHOP_BLOCKERS[sq]) + bishop_entry.offset];
+    let diagonal = bishop_attacks
+        & (board.get_piece_bitboard(Piece::Bishop, WHITE)
+            | board.get_piece_bitboard(Piece::Bishop, BLACK)
+            | queens);
+
+    let rook_entry = ROOK_MAGICS[sq];
+    let rook_attacks =
+        ROOK_ATTACKS[rook_entry.magic_index(occupancy & ROOK_BLOCKERS[sq]) + rook_entry.offset];
+    let straight = rook_attacks
+        & (board.get_piece_bitboard(Piece::Rook, WHITE)
+            | board.get_piece_bitboard(Piece::Rook, BLACK)
+            | queens);
+
+    pawns | knights | kings | diagonal | straight
+}
+
+/// The least valuable piece of `side` within `attackers`, as
+/// `(piece, square)`, or `None` if `side` has no attacker in the set.
+fn least_valuable_attacker(
+    board: &Board,
+    attackers: Bitboard,
+    side: Turn,
+) -> Option<(Piece, usize)> {
+    for piece in [
+        Piece::Pawn,
+        Piece::Knight,
+        Piece::Bishop,
+        Piece::Rook,
+        Piece::Queen,
+        Piece::King,
+    ] {
+        let candidates = attackers & board.get_piece_bitboard(piece, side);
+        if candidates.is_not_empty() {
+            return Some((piece, candidates.trailing_zeros()));
+        }
+    }
+    None
+}
+
+/// Static exchange evaluation: the material balance (in [`piece_value`]s, from
+/// the mover's perspective) of the capture `mv` after the best possible
+/// sequence of recaptures on the destination square by both sides. Standard
+/// iterative swap algorithm; each side always recaptures with its least
+/// valuable attacker, x-rays revealed as pieces come off, and negamax backup
+/// lets either side stop the exchange early.
+///
+/// Only meaningful for normal captures (no promotion / en-passant geometry).
+fn see(board: &Board, mv: Move) -> i32 {
+    let (origin, dest) = mv.get_org_and_dest();
+    let sq = dest.as_usize();
+
+    // gain[d]: speculative material balance for the side moving at depth d
+    let mut gain = [0_i32; 33];
+    let mut d = 0;
+    gain[0] = piece_value(board.get_piece_type_containing_position(dest));
+
+    let mut occupancy = !board.empty_tiles;
+    let mut attacker = board.get_piece_type_containing_position(origin);
+    let mut from_sq = origin.as_usize();
+    let mut side = board.turn;
+
+    while d + 1 < gain.len() {
+        d += 1;
+        gain[d] = piece_value(attacker) - gain[d - 1];
+        // both capturing and standing pat lose for the side to move: the
+        // remainder of the exchange cannot change the outcome
+        if gain[d].max(-gain[d - 1]) < 0 {
+            break;
+        }
+        occupancy.clear_square(from_sq);
+        side = !side;
+
+        let attackers = attackers_to(board, sq, occupancy) & occupancy;
+        let Some((piece, next_from)) = least_valuable_attacker(
+            board,
+            attackers & board.player_boards[usize::from(side)],
+            side,
+        ) else {
+            break;
+        };
+        // a king can only join the exchange if the square is otherwise
+        // undefended (capturing into a defended square would be illegal)
+        if piece == Piece::King
+            && (attackers & board.player_boards[usize::from(!side)]).is_not_empty()
+        {
+            break;
+        }
+        attacker = piece;
+        from_sq = next_from;
+    }
+
+    // negamax the speculative gains back to the root of the exchange; the
+    // deepest gain[d] belongs to a capture that never happened and is dropped
+    while d > 1 {
+        d -= 1;
+        gain[d - 1] = -((-gain[d - 1]).max(gain[d]));
+    }
+    gain[0]
 }
 
 /// Returns `true` if `mv` is a capture, promotion, or en passant — the moves
@@ -666,4 +1056,48 @@ fn move_order_score(
         score = history[origin.as_usize()][dest.as_usize()];
     }
     score
+}
+
+#[cfg(test)]
+mod tests {
+    use super::see;
+    use crate::chess_engine::board::Board;
+    use crate::chess_engine::utils::init_tables;
+
+    /// SEE of the legal move `mv` (UCI notation) in `fen`.
+    fn see_of(fen: &str, mv: &str) -> i32 {
+        init_tables();
+        let mut board = Board::from_fen(fen).unwrap();
+        let mv = board
+            .generate_moves(board.turn)
+            .into_iter()
+            .find(|m| m.to_string() == mv)
+            .expect("move should be legal in the test position");
+        see(&board, mv)
+    }
+
+    #[test]
+    fn see_capturing_an_undefended_piece_wins_its_value() {
+        // rook takes a queen nobody defends
+        assert_eq!(see_of("k7/8/8/3q4/8/8/3R4/K7 w - - 0 1", "d2d5"), 900);
+    }
+
+    #[test]
+    fn see_pawn_takes_defended_queen_still_wins() {
+        // d4 pawn takes the c5 queen; the d6 pawn recaptures: 900 - 100 > 0
+        assert!(see_of("k7/8/3p4/2q5/3P4/8/8/K7 w - - 0 1", "d4c5") > 0);
+    }
+
+    #[test]
+    fn see_rook_takes_defended_pawn_loses() {
+        // rook grabs the d5 pawn but the c6 pawn recaptures: 100 - 500 < 0
+        assert!(see_of("k7/8/2p5/3p4/8/8/3R4/K7 w - - 0 1", "d2d5") < 0);
+    }
+
+    #[test]
+    fn see_xray_recapture_is_seen() {
+        // RxR on d5 looks equal, but white's second rook on d1 backs the
+        // exchange up through the first: win a whole rook
+        assert!(see_of("k7/8/8/3r4/8/8/3R4/K2R4 w - - 0 1", "d2d5") >= 500);
+    }
 }

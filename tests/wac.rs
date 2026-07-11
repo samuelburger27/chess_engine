@@ -319,18 +319,15 @@ const WAC: [(&str, &str, &str); 300] = [
     ("b2b1r1k/3R1ppp/4qP2/4p1PQ/4P3/5B2/4N1K1/8 w - -", "g6", "WAC.300"),
 ];
 
-/// The search depth to run each WAC position at. Kept shallow (a debug build
-/// takes about a minute for the full suite at this depth) so the suite stays
-/// cheap enough to run on every `cargo test`; deeper search solves more
-/// tactics but costs roughly an order of magnitude more per extra ply.
-const SEARCH_DEPTH: u8 = 5;
+/// The search depth to run each WAC position at. Kept shallow
+const SEARCH_DEPTH: u8 = 8;
 
-/// Minimum number of positions that must pass for the test to succeed. This
-/// is a floor, not a target: the engine is not expected to solve every WAC
-/// tactic at `SEARCH_DEPTH` (currently ~136/300 pass), so the suite tolerates
-/// a chunk of failures without failing CI. Raise it as eval/search improves;
-/// if it regresses unexpectedly, that's a real signal.
-const MIN_PASSING: usize = 130;
+/// Minimum number of positions that must pass for the test to succeed.
+/// Currently 263 pass (after null-move pruning, LMR/PVS, the quiescence
+/// check-evasion fix, SEE, and the mobility/king-safety eval terms); the
+/// floor sits a few below so timing-independent noise can't flake CI while a
+/// real regression still trips it.
+const MIN_PASSING: usize = 255;
 
 /// A best move accepted for a WAC position, reduced to the fields needed to
 /// match it against an engine [`Move`] without generating full SAN.

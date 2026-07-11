@@ -160,6 +160,49 @@ impl Board {
         self.refresh_empty_tiles();
     }
 
+    /// Makes a "null move": passes the turn without moving a piece, used by
+    /// null-move pruning in the search. Clears the en-passant square (a pass
+    /// forfeits the capture) and keeps the Zobrist hash in sync; a
+    /// [`StateDelta`] with a sentinel move is pushed so
+    /// [`unmake_null_move`](Self::unmake_null_move) can restore the state.
+    ///
+    /// Must be undone with `unmake_null_move`, never with
+    /// [`unmake_move`](Self::unmake_move).
+    pub(crate) fn make_null_move(&mut self) {
+        self.history.push(StateDelta::new(
+            Move::make_raw(0), // sentinel: no piece moves
+            None,
+            self.en_passant,
+            self.castle_rights,
+            self.halfmove_count,
+            self.zobrist_key,
+        ));
+
+        self.xor_en_pass_from_zobrist(self.en_passant);
+        self.en_passant = Bitboard::new();
+        self.halfmove_count += 1;
+        if self.turn == BLACK {
+            self.fullmove_count += 1;
+        }
+        self.turn = !self.turn;
+        self.zobrist_key ^= ZOBRIST_TABLE.white_to_move;
+    }
+
+    /// Reverts the most recent [`make_null_move`](Self::make_null_move),
+    /// restoring the side to move, en-passant square, clocks, and Zobrist hash.
+    pub(crate) fn unmake_null_move(&mut self) {
+        let Some(delta) = self.history.pop() else {
+            return;
+        };
+        self.en_passant = delta.en_pass;
+        self.halfmove_count = delta.halfmove;
+        self.turn = !self.turn;
+        if self.turn == BLACK {
+            self.fullmove_count -= 1;
+        }
+        self.zobrist_key = delta.zobrist_hash;
+    }
+
     /// After a rook is captured, revokes the opponent's castling right on that
     /// rook's side if the rook is no longer on its starting square.
     fn captured_rook_remove_castle_rights(&mut self) {
@@ -395,6 +438,33 @@ mod tests {
         board.play_string_move("e2e4"); // pawn move resets the clock
         assert_eq!(board.halfmove_count, 0);
         assert_eq!(board.fullmove_count, 2);
+    }
+
+    #[test]
+    fn null_move_keeps_hash_consistent_and_restores_state() {
+        // a position with an en-passant square in effect, so the null move has
+        // to clear (and restore) the en-passant zobrist contribution too
+        let mut board =
+            Board::from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3")
+                .unwrap();
+        let original = board.clone();
+        assert_incremental_hash_matches(&board);
+
+        board.make_null_move();
+        assert_incremental_hash_matches(&board);
+        assert_ne!(board.zobrist_key, original.zobrist_key);
+
+        // a nested real move on top of the null move must still round-trip
+        assert!(board.play_string_move("g8f6"));
+        assert_incremental_hash_matches(&board);
+        board.unmake_move();
+
+        board.unmake_null_move();
+        assert_incremental_hash_matches(&board);
+        assert!(
+            board == original,
+            "unmake_null_move did not restore the original board"
+        );
     }
 
     #[test]
