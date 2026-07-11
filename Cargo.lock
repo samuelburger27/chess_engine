@@ -20,14 +20,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chess_engine"
-version = "0.1.0"
-dependencies = [
- "rand",
- "rand_pcg",
-]
-
-[[package]]
 name = "cpufeatures"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -84,4 +76,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a"
 dependencies = [
  "rand_core",
+]
+
+[[package]]
+name = "sabertooth"
+version = "0.1.0-alpha"
+dependencies = [
+ "rand",
+ "rand_pcg",
 ]

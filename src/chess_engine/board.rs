@@ -132,9 +132,9 @@ impl Board {
     /// which should never happen.
     ///
     /// ```
-    /// use chess_engine::chess_engine::board::{Board, WHITE};
-    /// use chess_engine::chess_engine::piece::Piece;
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::board::{Board, WHITE};
+    /// use sabertooth::chess_engine::piece::Piece;
+    /// use sabertooth::chess_engine::position::Position;
     ///
     /// let board = Board::new_start_pos().unwrap();
     /// assert_eq!(board.turn, WHITE);
@@ -154,7 +154,7 @@ impl Board {
     /// same square colour.
     ///
     /// ```
-    /// use chess_engine::chess_engine::board::Board;
+    /// use sabertooth::chess_engine::board::Board;
     /// // bare kings — a dead draw
     /// let kk = Board::from_fen("8/8/8/4k3/8/8/4K3/8 w - - 0 1").unwrap();
     /// assert!(kk.is_insufficient_material());
@@ -358,8 +358,8 @@ impl Board {
     /// Returns `true` if `turn`'s king is currently attacked.
     ///
     /// ```
-    /// use chess_engine::chess_engine::board::{Board, WHITE};
-    /// use chess_engine::chess_engine::utils::init_tables;
+    /// use sabertooth::chess_engine::board::{Board, WHITE};
+    /// use sabertooth::chess_engine::utils::init_tables;
     ///
     /// init_tables();
     /// // black rook on a1 checks the white king on e1 along the first rank

@@ -1,6 +1,6 @@
-# Chess Engine
+# SaberTooth
 
-A UCI-compatible chess engine written in Rust.
+SaberTooth is a UCI-compatible chess engine written in Rust.
 
 ## Features
 

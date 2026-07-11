@@ -270,8 +270,8 @@ impl Board {
     /// moves, leaving the board unchanged.
     ///
     /// ```
-    /// use chess_engine::chess_engine::board::Board;
-    /// use chess_engine::chess_engine::utils::init_tables;
+    /// use sabertooth::chess_engine::board::Board;
+    /// use sabertooth::chess_engine::utils::init_tables;
     ///
     /// init_tables();
     /// let mut board = Board::new_start_pos().unwrap();

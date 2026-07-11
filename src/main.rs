@@ -2,7 +2,7 @@
 //! UCI command loop. See the [`chess_engine`] library crate for the engine
 //! itself.
 
-use chess_engine::{chess_engine::utils::init_tables, uci::uci_protocol};
+use sabertooth::{chess_engine::utils::init_tables, uci::uci_protocol};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tables();

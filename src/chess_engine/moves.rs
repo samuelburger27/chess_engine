@@ -18,8 +18,8 @@
 //! # Examples
 //!
 //! ```
-//! use chess_engine::chess_engine::moves::Move;
-//! use chess_engine::chess_engine::position::Position;
+//! use sabertooth::chess_engine::moves::Move;
+//! use sabertooth::chess_engine::position::Position;
 //!
 //! let m = Move::new_default(Position::new(12), Position::new(28)); // e2 -> e4
 //! assert_eq!(m.get_origin(), Position::new(12));
@@ -116,8 +116,8 @@ impl Move {
     /// Decodes the special-move type (bits 14–15).
     ///
     /// ```
-    /// use chess_engine::chess_engine::moves::{Move, SpecialMove};
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::moves::{Move, SpecialMove};
+    /// use sabertooth::chess_engine::position::Position;
     /// let m = Move::new_default(Position::new(12), Position::new(28));
     /// assert_eq!(m.get_special_move(), SpecialMove::NormalMove);
     /// ```
@@ -164,8 +164,8 @@ impl Move {
     /// advancing from `origin` to `destination`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::moves::Move;
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::moves::Move;
+    /// use sabertooth::chess_engine::position::Position;
     /// // e7 (52) -> e8 (60)
     /// let promos = Move::new_promote(Position::new(52), Position::new(60));
     /// let strings: Vec<String> = promos.iter().map(|m| m.to_string()).collect();

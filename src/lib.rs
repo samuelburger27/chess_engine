@@ -12,9 +12,9 @@
 //! # Example
 //!
 //! ```
-//! use chess_engine::chess_engine::board::{Board, WHITE};
-//! use chess_engine::chess_engine::engine::search::find_best_move;
-//! use chess_engine::chess_engine::utils::init_tables;
+//! use sabertooth::chess_engine::board::{Board, WHITE};
+//! use sabertooth::chess_engine::engine::search::find_best_move;
+//! use sabertooth::chess_engine::utils::init_tables;
 //!
 //! // Build the lookup tables once at startup.
 //! init_tables();

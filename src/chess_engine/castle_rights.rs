@@ -28,8 +28,8 @@ impl CastleRights {
     /// Returns the starting rights, with all four castles available.
     ///
     /// ```
-    /// use chess_engine::chess_engine::castle_rights::CastleRights;
-    /// use chess_engine::chess_engine::board::{WHITE, BLACK};
+    /// use sabertooth::chess_engine::castle_rights::CastleRights;
+    /// use sabertooth::chess_engine::board::{WHITE, BLACK};
     /// let cr = CastleRights::make_default();
     /// assert!(cr.can_castle(WHITE, true));
     /// assert!(cr.can_castle(BLACK, false));
@@ -42,8 +42,8 @@ impl CastleRights {
     /// Builds rights from four booleans, one per `(colour, side)` combination.
     ///
     /// ```
-    /// use chess_engine::chess_engine::castle_rights::CastleRights;
-    /// use chess_engine::chess_engine::board::WHITE;
+    /// use sabertooth::chess_engine::castle_rights::CastleRights;
+    /// use sabertooth::chess_engine::board::WHITE;
     /// // White may only castle king-side.
     /// let cr = CastleRights::make(true, false, false, false);
     /// assert!(cr.can_castle(WHITE, true));

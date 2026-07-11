@@ -30,7 +30,7 @@ def forward_lines(src, dst, direction):
 
 
 def main():
-    real_prog = "/Users/samo/Documents/personal_projects/chess_engine/target/debug/chess_engine"
+    real_prog = "/Users/samo/Documents/personal_projects/chess_engine/target/debug/sabertooth"
 
     init_log()
 
