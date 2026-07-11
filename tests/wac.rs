@@ -320,14 +320,14 @@ const WAC: [(&str, &str, &str); 300] = [
 ];
 
 /// The search depth to run each WAC position at. Kept shallow
-const SEARCH_DEPTH: u8 = 8;
+const SEARCH_DEPTH: u8 = 9;
 
 /// Minimum number of positions that must pass for the test to succeed.
-/// Currently 263 pass (after null-move pruning, LMR/PVS, the quiescence
+/// Currently 280 pass (after null-move pruning, LMR/PVS, the quiescence
 /// check-evasion fix, SEE, and the mobility/king-safety eval terms); the
 /// floor sits a few below so timing-independent noise can't flake CI while a
 /// real regression still trips it.
-const MIN_PASSING: usize = 255;
+const MIN_PASSING: usize = 276;
 
 /// A best move accepted for a WAC position, reduced to the fields needed to
 /// match it against an engine [`Move`] without generating full SAN.
