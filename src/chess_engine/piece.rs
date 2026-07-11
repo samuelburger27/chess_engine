@@ -37,7 +37,7 @@ impl Piece {
     /// the search's positional [evaluation](super::engine).
     ///
     /// ```
-    /// use chess_engine::chess_engine::piece::Piece;
+    /// use sabertooth::chess_engine::piece::Piece;
     /// assert_eq!(Piece::Queen.get_piece_value(), 900);
     /// assert_eq!(Piece::None.get_piece_value(), 0);
     /// ```
@@ -60,7 +60,7 @@ impl Piece {
     /// `"n"`, `"b"`, `"k"`, `"q"`), or `"-"` for [`Piece::None`].
     ///
     /// ```
-    /// use chess_engine::chess_engine::piece::Piece;
+    /// use sabertooth::chess_engine::piece::Piece;
     /// assert_eq!(Piece::Knight.to_notation(), "n");
     /// ```
     #[must_use]
@@ -83,7 +83,7 @@ impl Piece {
 /// for anything else.
 ///
 /// ```
-/// use chess_engine::chess_engine::piece::Piece;
+/// use sabertooth::chess_engine::piece::Piece;
 /// assert_eq!(Piece::try_from("q"), Ok(Piece::Queen));
 /// assert_eq!(Piece::try_from("-"), Ok(Piece::None));
 /// assert!(Piece::try_from("x").is_err());
@@ -109,7 +109,7 @@ impl TryFrom<&str> for Piece {
 /// [`Piece::None`].
 ///
 /// ```
-/// use chess_engine::chess_engine::piece::Piece;
+/// use sabertooth::chess_engine::piece::Piece;
 /// assert_eq!(Piece::from(2), Piece::Knight);
 /// assert_eq!(Piece::from(99), Piece::None);
 /// ```

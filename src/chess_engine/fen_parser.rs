@@ -26,9 +26,9 @@ impl Board {
     /// move counter.
     ///
     /// ```
-    /// use chess_engine::chess_engine::board::{Board, BLACK, WHITE};
-    /// use chess_engine::chess_engine::piece::Piece;
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::board::{Board, BLACK, WHITE};
+    /// use sabertooth::chess_engine::piece::Piece;
+    /// use sabertooth::chess_engine::position::Position;
     ///
     /// // position after 1. e4
     /// let board =

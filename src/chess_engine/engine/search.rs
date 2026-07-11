@@ -156,9 +156,9 @@ impl SearchContext<'_> {
 /// the given depth with no time limit.
 ///
 /// ```
-/// use chess_engine::chess_engine::board::Board;
-/// use chess_engine::chess_engine::engine::search::{find_best_move, MATE_THRESHOLD};
-/// use chess_engine::chess_engine::utils::init_tables;
+/// use sabertooth::chess_engine::board::Board;
+/// use sabertooth::chess_engine::engine::search::{find_best_move, MATE_THRESHOLD};
+/// use sabertooth::chess_engine::utils::init_tables;
 ///
 /// init_tables();
 /// // White to move and mate in one: Ra8#.

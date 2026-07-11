@@ -17,7 +17,7 @@
 //! # Examples
 //!
 //! ```
-//! use chess_engine::chess_engine::bitboard::Bitboard;
+//! use sabertooth::chess_engine::bitboard::Bitboard;
 //!
 //! let mut bb = Bitboard::new();
 //! bb.set_square(0); // a1
@@ -51,7 +51,7 @@ impl Bitboard {
     /// Returns an empty bitboard (no squares set).
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert!(Bitboard::new().is_empty());
     /// ```
     #[must_use]
@@ -62,7 +62,7 @@ impl Bitboard {
     /// Wraps a raw `u64`, treating each set bit as a member square.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0xFF).get_bits(), 0xFF);
     /// ```
     #[must_use]
@@ -73,7 +73,7 @@ impl Bitboard {
     /// Returns a bitboard with every square set.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::full().count_bits(), 64);
     /// ```
     #[must_use]
@@ -86,7 +86,7 @@ impl Bitboard {
     /// Adds `square` (a `0..64` index) to the set. Out-of-range indices are ignored.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// let mut bb = Bitboard::new();
     /// bb.set_square(5);
     /// assert!(bb.is_square_set(5));
@@ -157,7 +157,7 @@ impl Bitboard {
     /// Returns the number of squares set (the population count).
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0b1111).count_bits(), 4);
     /// ```
     #[must_use]
@@ -182,7 +182,7 @@ impl Bitboard {
     /// or `None` if the board is empty.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0b1010).first_set_bit(), Some(1));
     /// assert_eq!(Bitboard::new().first_set_bit(), None);
     /// ```
@@ -199,7 +199,7 @@ impl Bitboard {
     /// or `None` if the board is empty.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::from_u64(0b1010).last_set_bit(), Some(3));
     /// ```
     #[must_use]
@@ -215,7 +215,7 @@ impl Bitboard {
     /// board is empty. This is the standard way to iterate over set squares.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// let mut bb = Bitboard::from_u64(0b1010);
     /// assert_eq!(bb.pop_lsb(), Some(1));
     /// assert_eq!(bb.pop_lsb(), Some(3));
@@ -253,7 +253,7 @@ impl Bitboard {
     /// an empty board for out-of-range files.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::file_mask(0).get_bits(), 0x0101_0101_0101_0101);
     /// ```
     #[must_use]
@@ -269,7 +269,7 @@ impl Bitboard {
     /// 8); an empty board for out-of-range ranks.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::rank_mask(0).get_bits(), 0xFF);
     /// ```
     #[must_use]
@@ -299,7 +299,7 @@ impl Bitboard {
     /// either coordinate is out of `0..8`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::square_from_coords(4, 3), Some(28)); // e4
     /// ```
     #[must_use]
@@ -315,7 +315,7 @@ impl Bitboard {
     /// if the index is out of `0..64`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// assert_eq!(Bitboard::coords_from_square(28), Some((4, 3))); // e4
     /// ```
     #[must_use]
@@ -331,7 +331,7 @@ impl Bitboard {
     /// consuming a copy of the board.
     ///
     /// ```
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     /// let squares: Vec<usize> = Bitboard::from_u64(0b1010).iter_set_bits().collect();
     /// assert_eq!(squares, vec![1, 3]);
     /// ```

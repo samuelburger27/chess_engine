@@ -14,9 +14,9 @@ use crate::chess_engine::board::Board;
 /// plies (a depth of `0` counts the position itself as one node).
 ///
 /// ```
-/// use chess_engine::chess_engine::board::Board;
-/// use chess_engine::chess_engine::utils::init_tables;
-/// use chess_engine::perft::perft;
+/// use sabertooth::chess_engine::board::Board;
+/// use sabertooth::chess_engine::utils::init_tables;
+/// use sabertooth::perft::perft;
 ///
 /// init_tables();
 /// let mut board = Board::new_start_pos().unwrap();

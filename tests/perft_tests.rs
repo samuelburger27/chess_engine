@@ -3,7 +3,7 @@
 //! shows up as a mismatch. Positions are taken from the
 //! [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results).
 
-pub use chess_engine::{
+pub use sabertooth::{
     chess_engine::{board::Board, position::Position},
     perft::perft,
 };

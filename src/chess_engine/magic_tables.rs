@@ -39,8 +39,8 @@ impl MagicEntry {
     /// (callers add [`offset`](Self::offset) to reach the shared table).
     ///
     /// ```
-    /// use chess_engine::chess_engine::magic_tables::MagicEntry;
-    /// use chess_engine::chess_engine::bitboard::Bitboard;
+    /// use sabertooth::chess_engine::magic_tables::MagicEntry;
+    /// use sabertooth::chess_engine::bitboard::Bitboard;
     ///
     /// let entry = MagicEntry { mask: Bitboard::full(), magic: 0xdead_beef, shift: 58, offset: 0 };
     /// // no blockers hashes to 0 regardless of the magic

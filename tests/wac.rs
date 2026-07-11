@@ -7,12 +7,12 @@
 //! pass, so it doesn't fail CI on eval/search regressions that still clear
 //! the bar.
 
-use chess_engine::chess_engine::board::Board;
-use chess_engine::chess_engine::engine::search::find_best_move;
-use chess_engine::chess_engine::moves::{Move, SpecialMove};
-use chess_engine::chess_engine::piece::Piece;
-use chess_engine::chess_engine::position::Position;
-use chess_engine::chess_engine::utils::init_tables;
+use sabertooth::chess_engine::board::Board;
+use sabertooth::chess_engine::engine::search::find_best_move;
+use sabertooth::chess_engine::moves::{Move, SpecialMove};
+use sabertooth::chess_engine::piece::Piece;
+use sabertooth::chess_engine::position::Position;
+use sabertooth::chess_engine::utils::init_tables;
 
 /// (FEN without move counters, accepted moves in SAN, WAC id).
 #[rustfmt::skip]

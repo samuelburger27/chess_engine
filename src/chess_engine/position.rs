@@ -8,7 +8,7 @@
 //! # Examples
 //!
 //! ```
-//! use chess_engine::chess_engine::position::Position;
+//! use sabertooth::chess_engine::position::Position;
 //!
 //! let e4 = Position::from_file_and_rank(4, 3);
 //! assert_eq!(e4.as_usize(), 28);
@@ -52,7 +52,7 @@ impl Position {
     /// Panics if `index >= 64`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).as_usize(), 28);
     /// ```
     #[must_use]
@@ -68,7 +68,7 @@ impl Position {
     /// Panics if `file >= 8` or `rank >= 8`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// assert_eq!(Position::from_file_and_rank(0, 0).as_usize(), 0); // a1
     /// assert_eq!(Position::from_file_and_rank(7, 7).as_usize(), 63); // h8
     /// ```
@@ -84,7 +84,7 @@ impl Position {
     /// Returns the `(file, rank)` coordinates of this square.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).get_file_and_rank(), (4, 3)); // e4
     /// ```
     #[must_use]
@@ -98,7 +98,7 @@ impl Position {
     /// or `None` if that would leave the board. Used to walk piece-movement rays.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// let e4 = Position::new(28);
     /// assert_eq!(e4.try_rank_file_offset(0, 1), Some(Position::new(36))); // e5
     /// assert_eq!(Position::new(0).try_rank_file_offset(-1, 0), None); // off the a-file
@@ -136,7 +136,7 @@ impl Position {
     /// Returns a [`Bitboard`] with exactly this square set.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// assert!(Position::new(28).bitboard().is_square_set(28));
     /// ```
     #[must_use]
@@ -149,7 +149,7 @@ impl Position {
     /// Returns the square in algebraic notation, e.g. `"e4"`.
     ///
     /// ```
-    /// use chess_engine::chess_engine::position::Position;
+    /// use sabertooth::chess_engine::position::Position;
     /// assert_eq!(Position::new(28).algebraic_notation(), "e4");
     /// ```
     #[must_use]
@@ -179,7 +179,7 @@ impl Position {
 /// followed by a rank digit (`1`–`8`).
 ///
 /// ```
-/// use chess_engine::chess_engine::position::Position;
+/// use sabertooth::chess_engine::position::Position;
 /// assert_eq!(Position::try_from("a1").unwrap().as_usize(), 0);
 /// assert!(Position::try_from("z9").is_err());
 /// ```

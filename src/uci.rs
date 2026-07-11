@@ -30,7 +30,7 @@ use crate::{
 };
 
 /// Engine name reported in the `uci` handshake.
-const ENGINE_NAME: &str = "RustChessEngine";
+const ENGINE_NAME: &str = "SaberTooth";
 /// Engine author reported in the `uci` handshake.
 const ENGINE_AUTHOR: &str = "Samuel Burger";
 
@@ -126,7 +126,7 @@ pub fn uci_protocol() -> Result<(), Box<dyn std::error::Error>> {
 /// Sends the `id name`/`id author`, the supported options, and the `uciok`
 /// handshake in response to `uci`.
 fn print_identity() {
-    println!("id name {ENGINE_NAME}");
+    println!("id name {ENGINE_NAME} {}", env!("CARGO_PKG_VERSION"));
     println!("id author {ENGINE_AUTHOR}");
     println!(
         "option name Threads type spin default {} min 1 max {MAX_THREADS}",
