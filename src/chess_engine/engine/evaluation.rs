@@ -11,7 +11,11 @@
 //! On top of material + PSTs the evaluation knows a handful of classic terms:
 //! passed, isolated, and doubled pawns; the bishop pair; rooks on open and
 //! semi-open files; a pawn shield in front of a castled king; and a tempo
-//! bonus for the side to move.
+//! bonus for the side to move. Passed pawns are further scaled by blockade,
+//! the king race to the stop square, and a rook behind the passer. Two
+//! board-wide terms round it out: *mobility* (safe attack squares per piece,
+//! against a per-piece baseline) and *king danger* (attack units on the king
+//! zone through a non-linear table, plus open files next to the king).
 //!
 //! PSTs are written rank-8-first (array index `0` = `a8`), while board squares
 //! are indexed from `a1` = `0`, so white squares are flipped with `sq ^ 56`
@@ -21,8 +25,12 @@
 //! positive is good for whoever is to move.
 
 use crate::chess_engine::{
+    bitboard::Bitboard,
     board::{BLACK, Turn, WHITE},
-    computed_boards::PASSED_PAWN_MASKS,
+    computed_boards::{
+        KING_RING_MOVES, KNIGHT_MOVES, PASSED_PAWN_MASKS, PAWN_ATTACKS, bishop_attacks,
+        rook_attacks,
+    },
     masks::{ADJACENT_FILE_MASKS, FILE_MASKS, RANK_MASKS},
     piece::Piece,
 };
@@ -97,6 +105,56 @@ const ROOK_SEMI_OPEN_FILE_MG: i32 = 12;
 /// Middlegame penalty per missing pawn in the shield directly in front of a
 /// king standing on its back two ranks.
 const KING_SHIELD_MISSING_MG: i32 = -15;
+
+// --- Mobility ---
+// Per-piece (mg, eg) weight for each safe attack square, and the typical
+// square count subtracted so the term is roughly zero-mean (a piece of
+// average activity neither gains nor loses).
+
+/// Knight mobility: (mg, eg) centipawns per square beyond the baseline.
+const KNIGHT_MOBILITY: (i32, i32) = (4, 4);
+/// Baseline safe-square count for a knight.
+const KNIGHT_MOBILITY_BASE: i32 = 4;
+/// Bishop mobility weight.
+const BISHOP_MOBILITY: (i32, i32) = (3, 3);
+/// Baseline safe-square count for a bishop.
+const BISHOP_MOBILITY_BASE: i32 = 6;
+/// Rook mobility weight.
+const ROOK_MOBILITY: (i32, i32) = (2, 4);
+/// Baseline safe-square count for a rook.
+const ROOK_MOBILITY_BASE: i32 = 7;
+/// Queen mobility weight.
+const QUEEN_MOBILITY: (i32, i32) = (1, 2);
+/// Baseline safe-square count for a queen.
+const QUEEN_MOBILITY_BASE: i32 = 13;
+
+// --- King danger (attack units) ---
+
+/// Attack units contributed by a knight or bishop attacking the king zone.
+const KING_ATTACK_MINOR: usize = 2;
+/// Attack units contributed by a rook attacking the king zone.
+const KING_ATTACK_ROOK: usize = 3;
+/// Attack units contributed by a queen attacking the king zone.
+const KING_ATTACK_QUEEN: usize = 5;
+/// Middlegame penalty by total attack units on a king's zone: roughly
+/// quadratic, so a single attacker is noise but a coordinated attack by
+/// several pieces snowballs. One attacking piece alone (≤ 5 units) is ignored.
+const KING_DANGER_MG: [i32; 20] = [
+    0, 0, 0, 0, 0, 0, 12, 18, 25, 34, 44, 56, 69, 84, 100, 118, 137, 158, 180, 204,
+];
+/// Middlegame penalty for a file next to the king with no friendly pawns.
+const KING_FILE_SEMI_OPEN_MG: i32 = -10;
+/// Additional middlegame penalty when that file has no pawns of either colour.
+const KING_FILE_OPEN_MG: i32 = -8;
+
+// --- Passed-pawn refinements ---
+
+/// Endgame weight of the king-distance race to a passer's stop square: the
+/// Chebyshev-distance difference (enemy king minus own king) times the pawn's
+/// relative rank, times this.
+const PASSED_KING_DIST_EG: i32 = 2;
+/// (mg, eg) bonus for a friendly rook on the passer's file behind it.
+const ROOK_BEHIND_PASSER: (i32, i32) = (5, 15);
 
 // --- Piece-Square Tables (PSTs) ---
 //
@@ -313,7 +371,11 @@ const fn piece_eval(piece: Piece) -> PieceEval {
 /// `(mg, eg)` bonuses from that side's perspective: passed, isolated, and
 /// doubled pawns, the bishop pair, rooks on open/semi-open files, and the
 /// king's pawn shield.
-#[allow(clippy::cast_possible_wrap)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::similar_names
+)]
 fn side_features(board: &Board, color: Turn) -> (i32, i32) {
     let own_pawns = board.get_piece_bitboard(Piece::Pawn, color);
     let enemy_pawns = board.get_piece_bitboard(Piece::Pawn, !color);
@@ -322,14 +384,48 @@ fn side_features(board: &Board, color: Turn) -> (i32, i32) {
     let mut eg = 0;
 
     // Passed and isolated pawns.
+    let own_king_sq = board
+        .get_piece_bitboard(Piece::King, color)
+        .trailing_zeros();
+    let enemy_king_sq = board
+        .get_piece_bitboard(Piece::King, !color)
+        .trailing_zeros();
     let mut pawns = own_pawns;
     while pawns.is_not_empty() {
         let sq = pawns.trailing_zeros();
         let file = sq % 8;
         let relative_rank = if color == WHITE { sq / 8 } else { 7 - sq / 8 };
         if (PASSED_PAWN_MASKS[usize::from(color)][sq] & enemy_pawns).is_empty() {
-            mg += PASSED_PAWN_MG[relative_rank];
-            eg += PASSED_PAWN_EG[relative_rank];
+            let mut pass_mg = PASSED_PAWN_MG[relative_rank];
+            let mut pass_eg = PASSED_PAWN_EG[relative_rank];
+
+            // a blockaded passer (stop square occupied) is worth much less
+            let stop_sq = if color == WHITE { sq + 8 } else { sq - 8 };
+            if !board.empty_tiles.is_square_set(stop_sq) {
+                pass_mg /= 2;
+                pass_eg /= 2;
+            }
+
+            // the endgame king race: shepherding king close to the stop
+            // square, defending king far — scaled by how advanced the pawn is
+            pass_eg += PASSED_KING_DIST_EG
+                * (chebyshev(enemy_king_sq, stop_sq) - chebyshev(own_king_sq, stop_sq))
+                * relative_rank as i32;
+
+            // a rook behind the passer pushes it and defends it as it runs
+            let behind = FILE_MASKS[file] & board.get_piece_bitboard(Piece::Rook, color);
+            let rook_is_behind = if color == WHITE {
+                (behind & Bitboard::from_u64((1_u64 << sq) - 1)).is_not_empty()
+            } else {
+                (behind & !Bitboard::from_u64((1_u64 << (sq + 1)) - 1)).is_not_empty()
+            };
+            if rook_is_behind {
+                pass_mg += ROOK_BEHIND_PASSER.0;
+                pass_eg += ROOK_BEHIND_PASSER.1;
+            }
+
+            mg += pass_mg;
+            eg += pass_eg;
         }
         if (ADJACENT_FILE_MASKS[file] & own_pawns).is_empty() {
             mg += ISOLATED_PAWN_MG;
@@ -386,6 +482,155 @@ fn side_features(board: &Board, color: Turn) -> (i32, i32) {
     (mg, eg)
 }
 
+/// Chebyshev (king-move) distance between two square indices.
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+const fn chebyshev(a: usize, b: usize) -> i32 {
+    let file_dist = ((a % 8) as i32 - (b % 8) as i32).abs();
+    let rank_dist = ((a / 8) as i32 - (b / 8) as i32).abs();
+    if file_dist > rank_dist {
+        file_dist
+    } else {
+        rank_dist
+    }
+}
+
+/// Squares attacked by `color`'s pawns.
+fn pawn_attack_map(board: &Board, color: Turn) -> Bitboard {
+    let mut attacks = Bitboard::new();
+    let mut pawns = board.get_piece_bitboard(Piece::Pawn, color);
+    while pawns.is_not_empty() {
+        attacks |= PAWN_ATTACKS[usize::from(color)][pawns.trailing_zeros()];
+        pawns.reset_lsb();
+    }
+    attacks
+}
+
+/// Mobility for one side, `(mg, eg)`: each knight, bishop, rook, and queen
+/// scores its count of *safe* attack squares (not occupied by a friendly
+/// piece, not covered by an enemy pawn) against a per-piece baseline, so an
+/// averagely active piece contributes nothing and trapped pieces are punished.
+#[allow(clippy::cast_possible_wrap)]
+fn side_mobility(board: &Board, color: Turn) -> (i32, i32) {
+    let occupancy = !board.empty_tiles;
+    // safe: not a friendly piece's square, not attacked by an enemy pawn
+    let safe = !(board.player_boards[usize::from(color)] | pawn_attack_map(board, !color));
+    let mut mg = 0;
+    let mut eg = 0;
+
+    let mut score_piece = |count: i32, base: i32, weight: (i32, i32)| {
+        mg += weight.0 * (count - base);
+        eg += weight.1 * (count - base);
+    };
+
+    let mut knights = board.get_piece_bitboard(Piece::Knight, color);
+    while knights.is_not_empty() {
+        let sq = knights.trailing_zeros();
+        let moves = (KNIGHT_MOVES[sq] & safe).count_bits() as i32;
+        score_piece(moves, KNIGHT_MOBILITY_BASE, KNIGHT_MOBILITY);
+        knights.reset_lsb();
+    }
+    let mut bishops = board.get_piece_bitboard(Piece::Bishop, color);
+    while bishops.is_not_empty() {
+        let sq = bishops.trailing_zeros();
+        let moves = (bishop_attacks(sq, occupancy) & safe).count_bits() as i32;
+        score_piece(moves, BISHOP_MOBILITY_BASE, BISHOP_MOBILITY);
+        bishops.reset_lsb();
+    }
+    let mut rooks = board.get_piece_bitboard(Piece::Rook, color);
+    while rooks.is_not_empty() {
+        let sq = rooks.trailing_zeros();
+        let moves = (rook_attacks(sq, occupancy) & safe).count_bits() as i32;
+        score_piece(moves, ROOK_MOBILITY_BASE, ROOK_MOBILITY);
+        rooks.reset_lsb();
+    }
+    let mut queens = board.get_piece_bitboard(Piece::Queen, color);
+    while queens.is_not_empty() {
+        let sq = queens.trailing_zeros();
+        let moves = ((bishop_attacks(sq, occupancy) | rook_attacks(sq, occupancy)) & safe)
+            .count_bits() as i32;
+        score_piece(moves, QUEEN_MOBILITY_BASE, QUEEN_MOBILITY);
+        queens.reset_lsb();
+    }
+
+    (mg, eg)
+}
+
+/// Middlegame king-danger penalty for `color`'s king (returned ≤ 0): sums
+/// attack units over the enemy knights, bishops, rooks, and queens whose
+/// attacks touch the king zone (the king and its ring) and maps the total
+/// through [`KING_DANGER_MG`], plus a penalty for semi-open/open files next to
+/// the king.
+fn king_danger(board: &Board, color: Turn) -> i32 {
+    let king_sq = board
+        .get_piece_bitboard(Piece::King, color)
+        .trailing_zeros();
+    let mut zone = KING_RING_MOVES[king_sq];
+    zone.set_square(king_sq);
+    let occupancy = !board.empty_tiles;
+
+    let mut units = 0_usize;
+    let mut count_attackers =
+        |mut pieces: Bitboard, weight: usize, diagonal: bool, straight: bool| {
+            while pieces.is_not_empty() {
+                let sq = pieces.trailing_zeros();
+                let mut attacks = Bitboard::new();
+                if diagonal {
+                    attacks |= bishop_attacks(sq, occupancy);
+                }
+                if straight {
+                    attacks |= rook_attacks(sq, occupancy);
+                }
+                if !diagonal && !straight {
+                    attacks = KNIGHT_MOVES[sq];
+                }
+                if (attacks & zone).is_not_empty() {
+                    units += weight;
+                }
+                pieces.reset_lsb();
+            }
+        };
+    count_attackers(
+        board.get_piece_bitboard(Piece::Knight, !color),
+        KING_ATTACK_MINOR,
+        false,
+        false,
+    );
+    count_attackers(
+        board.get_piece_bitboard(Piece::Bishop, !color),
+        KING_ATTACK_MINOR,
+        true,
+        false,
+    );
+    count_attackers(
+        board.get_piece_bitboard(Piece::Rook, !color),
+        KING_ATTACK_ROOK,
+        false,
+        true,
+    );
+    count_attackers(
+        board.get_piece_bitboard(Piece::Queen, !color),
+        KING_ATTACK_QUEEN,
+        true,
+        true,
+    );
+    let mut danger = -KING_DANGER_MG[units.min(KING_DANGER_MG.len() - 1)];
+
+    // files on and next to the king with no pawn cover invite heavy pieces
+    let own_pawns = board.get_piece_bitboard(Piece::Pawn, color);
+    let all_pawns = own_pawns | board.get_piece_bitboard(Piece::Pawn, !color);
+    let king_file = king_sq % 8;
+    for file_mask in &FILE_MASKS[king_file.saturating_sub(1)..=(king_file + 1).min(7)] {
+        if (*file_mask & own_pawns).is_empty() {
+            danger += KING_FILE_SEMI_OPEN_MG;
+            if (*file_mask & all_pawns).is_empty() {
+                danger += KING_FILE_OPEN_MG;
+            }
+        }
+    }
+
+    danger
+}
+
 /// Maps a board square (`a1` = 0) to its index into a rank-8-first PST array.
 ///
 /// White squares are flipped vertically (`sq ^ 56`) so they read the table from
@@ -433,6 +678,16 @@ pub(crate) fn evaluate(board: &Board) -> i32 {
     mg += white_mg - black_mg;
     eg += white_eg - black_eg;
 
+    // Mobility, white minus black.
+    let (white_mob_mg, white_mob_eg) = side_mobility(board, WHITE);
+    let (black_mob_mg, black_mob_eg) = side_mobility(board, BLACK);
+    mg += white_mob_mg - black_mob_mg;
+    eg += white_mob_eg - black_mob_eg;
+
+    // King danger (each side's own penalty, ≤ 0), middlegame only: with the
+    // heavy pieces off the board an "attacked" king zone means little.
+    mg += king_danger(board, WHITE) - king_danger(board, BLACK);
+
     // Tempo: the side to move has the initiative in the middlegame.
     if board.turn == WHITE {
         mg += TEMPO_MG;
@@ -456,10 +711,12 @@ pub(crate) fn evaluate(board: &Board) -> i32 {
 mod tests {
     use super::{
         BISHOP_PAIR_EG, BISHOP_PAIR_MG, DOUBLED_PAWN_EG, DOUBLED_PAWN_MG, ISOLATED_PAWN_EG,
-        ISOLATED_PAWN_MG, KING_SHIELD_MISSING_MG, ROOK_OPEN_FILE_MG, ROOK_SEMI_OPEN_FILE_MG,
-        TEMPO_MG, evaluate, side_features,
+        ISOLATED_PAWN_MG, KING_SHIELD_MISSING_MG, KNIGHT_MOBILITY, KNIGHT_MOBILITY_BASE,
+        PASSED_PAWN_EG, PASSED_PAWN_MG, ROOK_BEHIND_PASSER, ROOK_OPEN_FILE_MG,
+        ROOK_SEMI_OPEN_FILE_MG, TEMPO_MG, evaluate, king_danger, side_features, side_mobility,
     };
     use crate::chess_engine::board::{Board, WHITE};
+    use crate::chess_engine::utils::init_tables;
 
     #[test]
     fn start_position_gives_only_tempo() {
@@ -571,6 +828,59 @@ mod tests {
         // a king that has left the back ranks takes no shield penalty
         let out = Board::from_fen("4k3/8/8/8/4K3/8/8/8 w - - 0 1").unwrap();
         assert_eq!(side_features(&out, WHITE), (0, 0));
+    }
+
+    #[test]
+    fn central_knight_outmoves_cornered_knight() {
+        init_tables();
+        // a knight on d5 reaches all 8 squares (no friendly pieces or enemy
+        // pawn cover interfere)
+        let center = Board::from_fen("8/8/8/3N4/8/8/8/K6k w - - 0 1").unwrap();
+        let expected = KNIGHT_MOBILITY.0 * (8 - KNIGHT_MOBILITY_BASE);
+        assert_eq!(side_mobility(&center, WHITE).0, expected);
+        // a cornered knight has two squares and scores below the baseline
+        let corner = Board::from_fen("N7/8/8/8/8/8/8/K6k w - - 0 1").unwrap();
+        assert!(side_mobility(&corner, WHITE).0 < 0);
+    }
+
+    #[test]
+    fn attacked_king_zone_raises_danger() {
+        init_tables();
+        // queen g4 + rook a1 both bear on the white king's zone…
+        let attacked = Board::from_fen("k7/8/8/8/6q1/8/8/r5K1 w - - 0 1").unwrap();
+        // …while a lone distant queen touches nothing near g1
+        let safe = Board::from_fen("k7/8/8/q7/8/8/8/6K1 w - - 0 1").unwrap();
+        assert!(king_danger(&attacked, WHITE) < king_danger(&safe, WHITE));
+    }
+
+    #[test]
+    fn rook_behind_passer_is_rewarded() {
+        init_tables();
+        // same passer and kings; only the rook moves from behind (c1) to in
+        // front (c8) of the pawn's path
+        let diff = white_features_diff(
+            "4k3/8/8/2P5/8/8/8/2R1K3 w - - 0 1",
+            "2R1k3/8/8/2P5/8/8/8/4K3 w - - 0 1",
+        );
+        assert_eq!(diff, ROOK_BEHIND_PASSER);
+    }
+
+    #[test]
+    fn blockaded_passer_is_worth_half() {
+        init_tables();
+        // black knight sits on the c5-passer's stop square vs. loiters on f6
+        let diff = white_features_diff(
+            "4k3/8/5n2/2P5/8/8/8/4K3 w - - 0 1",
+            "4k3/8/2n5/2P5/8/8/8/4K3 w - - 0 1",
+        );
+        let rank = 4; // c5 from White's point of view
+        assert_eq!(
+            diff,
+            (
+                PASSED_PAWN_MG[rank] - PASSED_PAWN_MG[rank] / 2,
+                PASSED_PAWN_EG[rank] - PASSED_PAWN_EG[rank] / 2
+            )
+        );
     }
 
     #[test]

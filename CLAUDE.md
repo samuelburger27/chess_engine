@@ -55,9 +55,9 @@ The crate is a UCI chess engine written in Rust. The public surface in `src/lib.
 
 ### Engine (`src/chess_engine/engine/`)
 
-`search.rs` — iterative deepening over fail-soft negamax with alpha-beta pruning, quiescence search (captures/promotions only), MVV-LVA move ordering, and draw detection (fifty-move, twofold repetition via the history hashes, insufficient material). Mate scores are encoded as `MATE_SCORE - ply`. `search_position` polls an `AtomicBool` stop flag and an optional deadline every 2048 nodes and prints UCI `info` lines per completed depth; the UCI layer owns time allocation (`clock/25 + inc/2`, capped at half the clock).
+`search.rs` — iterative deepening (with aspiration windows) over fail-soft negamax with alpha-beta pruning, null-move pruning, principal variation search, late move reductions, and check extensions; quiescence search (captures/promotions, or all evasions while in check) with delta and SEE pruning; move ordering by TT move, MVV-LVA, killers, and the history heuristic; and draw detection (fifty-move, twofold repetition via the history hashes, insufficient material). Mate scores are encoded as `MATE_SCORE - ply`. Null moves use `Board::make_null_move`/`unmake_null_move` (`make_move.rs`). `search_position` polls an `AtomicBool` stop flag and an optional deadline every 2048 nodes and prints UCI `info` lines per completed depth; the UCI layer owns time allocation (`clock/25 + inc/2`, capped at half the clock).
 
-`evaluation.rs` — tapered material + piece-square-table evaluation. Game phase is computed from the remaining piece count; king PST is interpolated between middlegame and endgame tables. PSTs are written rank-8-first, so white squares are flipped (`sq ^ 56`) via `pst_index` and black squares index directly.
+`evaluation.rs` — tapered material + piece-square-table evaluation. Game phase is computed from the remaining piece count; king PST is interpolated between middlegame and endgame tables. PSTs are written rank-8-first, so white squares are flipped (`sq ^ 56`) via `pst_index` and black squares index directly. On top: pawn structure (passed — scaled by blockade, king race, rook behind — isolated, doubled), bishop pair, rook file bonuses, king pawn shield, per-piece mobility against a baseline, and attack-unit king danger (middlegame only).
 
 ### Testing
 
