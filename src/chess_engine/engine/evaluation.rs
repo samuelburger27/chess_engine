@@ -399,18 +399,25 @@ fn side_features(board: &Board, color: Turn) -> (i32, i32) {
             let mut pass_mg = PASSED_PAWN_MG[relative_rank];
             let mut pass_eg = PASSED_PAWN_EG[relative_rank];
 
-            // a blockaded passer (stop square occupied) is worth much less
-            let stop_sq = if color == WHITE { sq + 8 } else { sq - 8 };
-            if !board.empty_tiles.is_square_set(stop_sq) {
-                pass_mg /= 2;
-                pass_eg /= 2;
-            }
+            // The stop square is one rank ahead of the passer. A pawn already
+            // on the promotion rank (only reachable from an unvalidated FEN)
+            // has no stop square, so skip the heuristics that would otherwise
+            // index off the board.
+            if relative_rank < 7 {
+                let stop_sq = if color == WHITE { sq + 8 } else { sq - 8 };
 
-            // the endgame king race: shepherding king close to the stop
-            // square, defending king far — scaled by how advanced the pawn is
-            pass_eg += PASSED_KING_DIST_EG
-                * (chebyshev(enemy_king_sq, stop_sq) - chebyshev(own_king_sq, stop_sq))
-                * relative_rank as i32;
+                // a blockaded passer (stop square occupied) is worth much less
+                if !board.empty_tiles.is_square_set(stop_sq) {
+                    pass_mg /= 2;
+                    pass_eg /= 2;
+                }
+
+                // the endgame king race: shepherding king close to the stop
+                // square, defending king far — scaled by how advanced the pawn is
+                pass_eg += PASSED_KING_DIST_EG
+                    * (chebyshev(enemy_king_sq, stop_sq) - chebyshev(own_king_sq, stop_sq))
+                    * relative_rank as i32;
+            }
 
             // a rook behind the passer pushes it and defends it as it runs
             let behind = FILE_MASKS[file] & board.get_piece_bitboard(Piece::Rook, color);
