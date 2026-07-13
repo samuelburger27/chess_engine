@@ -329,6 +329,10 @@ const SEARCH_DEPTH: u8 = 9;
 /// real regression still trips it.
 const MIN_PASSING: usize = 276;
 
+// At SEARCH_DEPTH 10 we pass 292/300 positions, failing only WAC.002, WAC.087, WAC.213, WAC.222, WAC.229, WAC.230, WAC.270, and WAC.293.
+// WAC suite: 292/300 passed
+// Failed: WAC.002, WAC.087, WAC.213, WAC.222, WAC.229, WAC.230, WAC.270, WAC.293
+
 /// A best move accepted for a WAC position, reduced to the fields needed to
 /// match it against an engine [`Move`] without generating full SAN.
 enum ExpectedMove {
